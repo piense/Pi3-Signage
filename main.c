@@ -6,7 +6,6 @@
 
 #include "compositor/compositor.h"
 
-
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <ifaddrs.h>
@@ -17,14 +16,14 @@
 
 int main(int argc, char *argv[])
 {
-	pis_compositorErrors pis_initializeCompositor();
+	pis_initializeCompositor();
 
 	while(1)
 	{
-	pis_compositorErrors pis_doCompositor();
+		pis_doCompositor();
 	}
 
-	pis_compositorErrors pis_cleanup();
+	pis_compositorcleanup();
 
 	return 0;
 }

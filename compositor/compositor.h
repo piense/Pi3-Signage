@@ -7,13 +7,16 @@
 #include "bcm_host.h"
 #include "vgfont.h"
 
+//TODO: The compositor shouldn't be managing all the slides,
+//Need to separate that out and find a nice way to manage the image cache in RAM
+
 //ARGB 32 bit image buffer
-typedef struct pis_Img
+typedef struct pis_img
 {
 	uint32_t *img;
 	uint32_t width;
 	uint32_t height;
-}pis_Img;
+}pis_img;
 
 typedef enum pis_compositorErrors
 {
@@ -87,6 +90,7 @@ typedef struct pis_slides_s{
 //	bool loaded; //media content is ready in memory
 
 	pis_mediaElementList_s *mediaElementsHead;
+	pis_slides_s *next;
 
 } pis_slides_s;
 
@@ -112,7 +116,7 @@ typedef struct pis_compositor_s
 pis_compositor_s pis_compositor;
 
 pis_compositorErrors pis_initializeCompositor();
-pis_compositorErrors pis_cleanup();
+pis_compositorErrors pis_compositorcleanup();
 pis_compositorErrors pis_doCompositor(); //Might end up as a thread from init
 
 

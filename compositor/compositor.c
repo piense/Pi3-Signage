@@ -134,7 +134,7 @@ pis_compositorErrors pis_initializeCompositor()
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
-pis_compositorErrors pis_cleanup()
+pis_compositorErrors pis_compositorcleanup()
 {
 	graphics_delete_resource(pis_compositor.dissolveImg);
 
@@ -155,7 +155,9 @@ pis_compositorErrors pis_doCompositor()
 	ms = round(spec.tv_nsec / 1.0e6)+s2*1000; // Convert nanoseconds to milliseconds
 
 	switch(state){
-		case 0: opacity = ((float)(ms-pis_compositor.dissolveStartTime))/dissolveTime;
+
+		//Slide transition Time
+		case 0: opacity = ((float)(ms-pis_compositor.dissolveStartTime))/pis_compositor.slideStartTime;
 			if(opacity > 1)	{
 				opacity = 1;
 				state = 1;
@@ -163,35 +165,51 @@ pis_compositorErrors pis_doCompositor()
 			}
 			break;
 
+		//Transition over, copy to opaque background layer
 		case 1:
 			//graphics_userblt(GRAPHICS_RESOURCE_RGBA32,current->image,0,0,width,height,width*4,backImg,0,0);
-			//TODO composite slide to buffer
+			//TODO: Move slide from dissolve layer to background layer
 			graphics_display_resource(pis_compositor.backImg, 0, 0, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 1, VC_DISPMAN_ROT0, 1);
 			state = 2;
 			break;
 
+		//Forgetw hy this is here but I think it prevents flickering while layers are shuffeled
 		case 2: opacity=0; state = 3; break;
 
+		//Render the next slide to the dissolve layer
 		case 3:
-			pis_compositor.slideDissolveTime = current->dissolveToNextTime;
-			pis_compositor. holdTime = current->holdTime;
+			//TODO: Handle NULL currentSlide
+			if(pis_compositor.currentSlide == NULL)
+			{
+				//TODO: Something about timing
+				//TODO: Render black?
+				state = 4;
+				break;
+			}
+
+			pis_compositor.slideDissolveTime = pis_compositor.currentSlide->dissolve;
+			pis_compositor.slideHoldTime = pis_compositor.currentSlide->duration;
 
 			//TODO: load next slide here
+			if(pis_compositor.currentSlide->next == NULL)
+			{
+				pis_compositor.currentSlide = pis_compositor.slides;
+			}else{
+				pis_compositor.currentSlide = pis_compositor.currentSlide->next;
+			}
 
-			if(current->next == NULL)
-				current = head;
-			else
-				current = current->next;
+			//TODO: Iterate over media elements in slide and render them to screen
+			//graphics_userblt(GRAPHICS_RESOURCE_RGBA32, current->image,0,0,width,height,width*4,dissolveImg,0,0);
 
-			graphics_userblt(GRAPHICS_RESOURCE_RGBA32, current->image,0,0,width,height,width*4,dissolveImg,0,0);
 			graphics_display_resource(pis_compositor.dissolveImg, 0, 1, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 0, VC_DISPMAN_ROT0, 1);
 			state = 4;
 			break;
 
+		//Wait for the current slide to timeout and then start a dissolve when it's time
 		case 4:
-			if((ms-startTime) > holdTime){
+			if((ms-pis_compositor.slideStartTime) > pis_compositor.slideHoldTime){
 				state = 0;
-				startTime = ms;
+				pis_compositor.slideDissolveTime = ms;
 			}
 			break;
 	}

@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "ilclient.h"
+#include "ilclient/ilclient.h"
 #include "tricks.h"
 
 sImage *resizeImage2(char *img,

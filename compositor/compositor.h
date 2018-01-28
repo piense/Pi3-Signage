@@ -1,11 +1,17 @@
 #pragma once
 
 #include <stdint.h>
-#include <bool.h>
+#include <stdbool.h>
 
 //External Libs
 #include "bcm_host.h"
-#include "vgfont.h"
+#include "vgfont/vgfont.h"
+
+#define PIS_COLOR_ARGB_BLACK 0xFF000000
+#define PIS_COLOR_ARGB_WHITE 0xFFFFFFFF
+#define PIS_COLOR_ARGB_RED   0xFFFF0000
+#define PIS_COLOR_ARGB_GREEN 0xFF00FF00
+#define PIS_COLOR_ARGB_BLUE  0xFF0000FF
 
 //TODO: The compositor shouldn't be managing all the slides,
 //Need to separate that out and find a nice way to manage the image cache in RAM
@@ -61,6 +67,7 @@ typedef struct pis_mediaText
 	float x, y, fontHeight;
 	char *fontName;
 	char *text;
+	uint32_t color;
 }pis_mediaText;
 
 typedef struct pis_mediaAudio
@@ -80,7 +87,7 @@ typedef struct pis_mediaElement_s
 typedef struct pis_mediaElementList_s
 {
 	pis_mediaElement_s mediaElement;
-	pis_mediaElementList_s *next;
+	struct pis_mediaElementList_s *next;
 }pis_mediaElementList_s;
 
 //A set of presentation slides
@@ -90,7 +97,7 @@ typedef struct pis_slides_s{
 //	bool loaded; //media content is ready in memory
 
 	pis_mediaElementList_s *mediaElementsHead;
-	pis_slides_s *next;
+	struct pis_slides_s *next;
 
 } pis_slides_s;
 
@@ -119,5 +126,5 @@ pis_compositorErrors pis_initializeCompositor();
 pis_compositorErrors pis_compositorcleanup();
 pis_compositorErrors pis_doCompositor(); //Might end up as a thread from init
 
-
+pis_compositorErrors pis_AddTextToSlide(pis_slides_s *slide, char* text, char* fontName, float height, float x, float y, uint32_t color);
 

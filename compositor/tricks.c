@@ -1,4 +1,4 @@
-#include <tricks.h>
+#include "tricks.h"
 #include <stdlib.h>
 #include <stdio.h>
 

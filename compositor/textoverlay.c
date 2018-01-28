@@ -1,7 +1,7 @@
 #include "textoverlay.h"
 
 #include "bcm_host.h"
-#include "vgfont.h"
+#include "vgfont/vgfont.h"
 #include <assert.h>
 #include <stdio.h>
 
@@ -19,7 +19,7 @@ static const char *strnchr(const char *str, size_t len, char c)
 }
 
 
-int32_t render_subtitle(GRAPHICS_RESOURCE_HANDLE img, const char *text, const uint32_t skip, const uint32_t text_size, const uint32_t y_offset)
+int32_t render_subtitle(GRAPHICS_RESOURCE_HANDLE img, const char *text, const uint32_t skip, const uint32_t text_size, const uint32_t y_offset, const uint32_t color)
 {
    uint32_t text_length = strlen(text)-skip;
    uint32_t width=0, height=0;
@@ -53,11 +53,11 @@ int32_t render_subtitle(GRAPHICS_RESOURCE_HANDLE img, const char *text, const ui
       s = graphics_resource_render_text_ext(img, (img_w - width)>>1, y_offset-height,
                                      GRAPHICS_RESOURCE_WIDTH,
                                      GRAPHICS_RESOURCE_HEIGHT,
-                                     GRAPHICS_RGBA32(0xff,0xff,0xff,0xff), /* fg */
-                                     GRAPHICS_RGBA32(0,0,0,0x00), /* bg */
+                                     color, /* fg */
+									 GRAPHICS_TRANSPARENT_COLOUR, /* bg */
                                      split, text_length-(split-text), text_size);
       if (s!=0) return s;
    }
-   return render_subtitle(img, text, skip+text_length-len, text_size, y_offset - height);
+   return render_subtitle(img, text, skip+text_length-len, text_size, y_offset - height, color);
 }
 

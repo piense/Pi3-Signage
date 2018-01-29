@@ -7,6 +7,7 @@ sImage *generateYUV420PackedTestImage(uint32_t width, uint32_t height)
 	return NULL;
 }
 
+//Never got this to work correctly, not sure where problem is
 sImage *colorspaceYUV420PackedToRGBA32Slice(sImage *src, uint32_t strideHeight){
 
 	//UV are subsampled twice in the vertical and twice in the horizontal direction

@@ -32,7 +32,7 @@ typedef enum pis_compositorErrors
 typedef enum pis_mediaSizing
 {
 	pis_SIZE_CROP,
-	pis_SIZE_FIT,
+	pis_SIZE_SCALE,
 	pis_SIZE_STRETCH
 } pis_mediaSizing;
 
@@ -47,11 +47,16 @@ typedef enum pis_mediaTypes
 //x,y to center of item
 //width and height relative to frame size of 1x1
 
+//TODO: Storing media on a per-slide basis is less than efficient
+//Slides should point to a media library with cache that can be
+//preloaded and reused RAM permitting
+
 typedef struct pis_mediaImage
 {
 	float x, y, maxWidth, maxHeight;
 	char *filename;
 	pis_mediaSizing sizing;
+	pis_img cache;
 } pis_mediaImage;
 
 typedef struct pis_mediaVideo
@@ -111,13 +116,11 @@ typedef struct pis_compositor_s
 
 	pis_slides_s *currentSlide;
 
-	uint32_t fps; //as calculated in pis_doCompositor
-
 	double dissolveStartTime;
 	double slideStartTime;
 	uint32_t slideHoldTime;
 	uint32_t slideDissolveTime;
-	uint8_t transitionState;
+
 } pis_compositor_s;
 
 pis_compositor_s pis_compositor;

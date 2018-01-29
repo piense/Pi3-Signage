@@ -1154,8 +1154,9 @@ int ilclient_wait_for_event(COMPONENT_T *comp, OMX_EVENTTYPE event,
 
       status = vcos_event_flags_get(&comp->event, event_flag, VCOS_OR_CONSUME, 
                                     suspend, &set);
-      if (status != 0)
+      if (status != 0){
          return -1;
+      }
       if (set & ILCLIENT_EVENT_ERROR)
          return -2;
       if (set & ILCLIENT_CONFIG_CHANGED)

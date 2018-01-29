@@ -1,7 +1,7 @@
 //System headers
 #include <time.h>
 #include <stdio.h>
-#include <dirent.h>
+//#include <dirent.h>
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -17,82 +17,48 @@
 #include "tricks.h"
 #include "textoverlay.h"
 
-
-uint8_t * loadImage(char *filename, uint16_t width, uint16_t height)
+double linuxTimeInMs()
 {
 	time_t		s2;
 	struct timespec spec;
-	uint8_t *img2;
-
-	clock_gettime(CLOCK_REALTIME, &spec);
-	s2  = spec.tv_sec;
-	double startMs = round(spec.tv_nsec / 1.0e6)+s2*1000; // Convert nanoseconds to milliseconds
-
-	sImage *ret = decodeJpgImage(filename);
 
     clock_gettime(CLOCK_REALTIME, &spec);
     s2  = spec.tv_sec;
-    double endMs = round(spec.tv_nsec / 1.0e6)+s2*1000; // Convert nanoseconds to milliseconds
-
-    img2 = ret->imageBuf;
-    free(ret);
-
-    printf("Loaded image in %f seconds.\n",(endMs-startMs)/1000.0);
-	return img2;
+    return round(spec.tv_nsec / 1.0e6)+s2*1000; // Convert nanoseconds to milliseconds
 }
 
-/*
-void addImageToList(char *image, uint16_t width, uint16_t height){
-	pis_Img * current;
-
-	if(head == NULL){
-		head = malloc(sizeof(img_t));
-		//head->image = malloc(width*height*4);
-		head->holdTime = 10000;
-		head->dissolveToNextTime = 1000;
-		head->next = NULL;
-		head->image = loadImage(image, width, height);
-	}else{
-		current = head;
-		while(current->next != NULL){
-			current = current->next;
-		}
-		current->next = malloc(sizeof(img_t));
-		current = current->next;
-		//current->image = malloc(width*height*4);
-		current->holdTime = 10000;
-		current->dissolveToNextTime = 1000;
-		current->next = NULL;
-		current->image = loadImage(image, width, height);
-	}
-}*/
-
-void loadImages(uint16_t width, uint16_t height)
+sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight)
 {
-	DIR           *d;
-	struct dirent *dir;
-	d = opendir("/mnt/data/images/");
+	double startMs = linuxTimeInMs();
 
-	if(d == NULL){
-		printf("Error opening images directory.\n");
-	}
+	sImage *ret1 = decodeJpgImage(filename);
 
-	char fullname[1000];
-	if (d)
-	{
-		while ((dir = readdir(d)) != NULL)
-		{
-			if(strstr(dir->d_name, ".jpg") != NULL || strstr(dir->d_name, ".bmp") != NULL || strstr(dir->d_name, ".jpeg") != NULL ) {
-				printf("\nAdding: %s\n",dir->d_name);
-				sprintf(&fullname[0],"%s%s","/mnt/data/images/",dir->d_name);
-				//addImageToList(&fullname[0],width,height);
-			}
-		}
-	closedir(d);
-	}
+	printf("Loaded image in %f seconds.\n",(linuxTimeInMs()-startMs)/1000.0);
+
+	startMs = linuxTimeInMs();
+
+	printf("Resizing to: %dx%d\n",maxWidth,maxHeight);
+
+    sImage *ret2 = resizeImage2((char *)ret1->imageBuf, ret1->imageWidth, ret1->imageHeight,
+    		ret1->imageSize,
+			ret1->colorSpace,
+			ret1->stride,
+			ret1->sliceHeight,
+			maxWidth,maxHeight,
+			0, 1
+			);
+
+    double endMs = linuxTimeInMs();
+
+    free(ret1->imageBuf);
+
+    free(ret1);
+
+    printf("Resized image in %f seconds.\n\n",(endMs-startMs)/1000.0);
+	return ret2;
 }
 
-pis_compositorErrors pis_addNewSlide(uint32_t dissolveTime, uint32_t duration, char *name)
+pis_compositorErrors pis_addNewSlide(pis_slides_s **ret, uint32_t dissolveTime, uint32_t duration, char *name)
 {
 
 	pis_slides_s *newSlide = malloc(sizeof(pis_slides_s));
@@ -110,6 +76,8 @@ pis_compositorErrors pis_addNewSlide(uint32_t dissolveTime, uint32_t duration, c
 			current = current->next;
 		current->next = newSlide;
 	}
+
+	*ret = newSlide;
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
@@ -131,8 +99,66 @@ pis_compositorErrors pis_AddTextToSlide(pis_slides_s *slide, char* text, char* f
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
+pis_compositorErrors pis_AddImageToSlide(pis_slides_s *slide, char* file,
+		float x, float y, float width, float height, pis_mediaSizing sizing)
+{
+	pis_mediaElementList_s *newMedia = malloc(sizeof(pis_mediaElementList_s));
+	newMedia->mediaElement.data = malloc(sizeof(pis_mediaImage));
+	newMedia->mediaElement.mediaType = pis_MEDIA_IMAGE;
+
+	//TODO range check x,y,width,height
+
+	((pis_mediaImage *)newMedia->mediaElement.data)->filename = file;
+	((pis_mediaImage *)newMedia->mediaElement.data)->maxHeight = height;
+	((pis_mediaImage *)newMedia->mediaElement.data)->maxWidth = width;
+	((pis_mediaImage *)newMedia->mediaElement.data)->x = x;
+	((pis_mediaImage *)newMedia->mediaElement.data)->y = y;
+	((pis_mediaImage *)newMedia->mediaElement.data)->sizing = sizing;
+
+	sImage *img = loadImage(file, width * pis_compositor.screenWidth, height * pis_compositor.screenHeight);
+
+	((pis_mediaImage *)newMedia->mediaElement.data)->cache.img = (uint32_t *) img->imageBuf;
+	((pis_mediaImage *)newMedia->mediaElement.data)->cache.width =  img->imageWidth;
+	((pis_mediaImage *)newMedia->mediaElement.data)->cache.height =  img->imageHeight;
+	free(img);
+
+	newMedia->next = slide->mediaElementsHead;
+	newMedia->mediaElement.name = "Image";
+	slide->mediaElementsHead = newMedia;
+	return pis_COMPOSITOR_ERROR_NONE;
+}
+
 pis_compositorErrors pis_initializeCompositor()
 {
+
+	pis_compositor.screenWidth = 1920;
+	pis_compositor.screenHeight = 1080;
+
+	//Demo slides
+
+	pis_slides_s *newSlide;
+
+	pis_addNewSlide(&newSlide, 1000,10000,"Slide 1");
+
+	pis_compositor.slides = newSlide;
+
+	pis_AddTextToSlide(newSlide,"Theodore David McVay","",200.0/1920.0,.3,.95,0xFFFF0000);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.5,.5,
+			1,1,pis_SIZE_SCALE);
+
+	pis_addNewSlide(&newSlide, 1000,10000,"Slide 3");
+
+	pis_AddTextToSlide(newSlide,"Ollie!","",200.0/1920.0,.1,.95,0xFFFF0000);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.5,.5,
+					1,1,pis_SIZE_SCALE);
+
+	pis_compositor.currentSlide = pis_compositor.slides;
+
+	//-----
+
+
 	vc_gencmd_init();
 
 	bcm_host_init();
@@ -176,26 +202,15 @@ pis_compositorErrors pis_initializeCompositor()
 	graphics_update_displayed_resource(pis_compositor.backImg, 0, 0, 0, 0);
 	graphics_update_displayed_resource(pis_compositor.dissolveImg, 0, 0, 0, 0);
 
-	pis_compositor.slides = NULL;
-	pis_compositor.currentSlide = NULL;
+	//pis_compositor.slides = NULL;
+	//pis_compositor.currentSlide = NULL;
 	pis_compositor.state = 1;
 
 	pis_compositor.slideHoldTime = 0;
 	pis_compositor.slideStartTime = 0;
 	pis_compositor.slideDissolveTime = 0;
 
-	pis_addNewSlide(1000,3000,"Slide 1");
-	pis_addNewSlide(1000,3000,"Slide 2");
 
-	pis_AddTextToSlide(pis_compositor.slides,"Hello World 1","",50.0/1920.0,.3,.3,0xFFFF0000);
-	pis_AddTextToSlide(pis_compositor.slides,"Hello World 2","",50.0/1920.0,.3,.6,0xFFFFFFFF);
-	pis_AddTextToSlide(pis_compositor.slides,"Renee 3","",50.0/1920.0,.3,.4,0xFFFFFFFF);
-
-	pis_AddTextToSlide(pis_compositor.slides->next,"Hello World 3","",50.0/1920.0,.3,.2,0xFFFF0000);
-	pis_AddTextToSlide(pis_compositor.slides->next,"Hello World 5","",50.0/1920.0,.3,.4,0xFFFFFFFF);
-	pis_AddTextToSlide(pis_compositor.slides->next,"Renee","",50.0/1920.0,.3,.45,0xFFFFFFFF);
-
-	pis_compositor.currentSlide = pis_compositor.slides;
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
@@ -217,8 +232,27 @@ pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides
 
 	while(current != NULL){
 		switch(current->mediaElement.mediaType){
-			case pis_MEDIA_IMAGE: break;
-			case pis_MEDIA_VIDEO: break;
+			case pis_MEDIA_IMAGE:
+				//TODO: range check width & height
+				graphics_userblt(GRAPHICS_RESOURCE_RGBA32,
+						((pis_mediaImage *)current->mediaElement.data)->cache.img,
+						0,0,
+						((pis_mediaImage *)current->mediaElement.data)->cache.width
+						,((pis_mediaImage *)current->mediaElement.data)->cache.height,
+						((pis_mediaImage *)current->mediaElement.data)->cache.width*4,
+						res,
+						(uint32_t)(((pis_mediaImage *)current->mediaElement.data)->x*pis_compositor.screenWidth
+								-((float)((pis_mediaImage *)current->mediaElement.data)->cache.width)/2.0)
+						,
+						(uint32_t)(((pis_mediaImage *)current->mediaElement.data)->y*pis_compositor.screenHeight
+														-((float)((pis_mediaImage *)current->mediaElement.data)->cache.height)/2.0)
+						);
+				break;
+
+			//TODO:
+			case pis_MEDIA_VIDEO:
+				break;
+
 			case pis_MEDIA_TEXT:
 				//TODO: Support other fonts
 				//TODO: Range check font size and positions
@@ -229,6 +263,8 @@ pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides
 						);
 
 				break;
+
+			//TODO:
 			case pis_MEDIA_AUDIO: break;
 		}
 		current = current->next;
@@ -239,14 +275,9 @@ pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides
 
 pis_compositorErrors pis_doCompositor()
 {
-	double            ms; // Milliseconds
-	time_t		s2;
-	struct timespec spec;
 	float opacity;
 
-	clock_gettime(CLOCK_REALTIME, &spec);
-	s2  = spec.tv_sec;
-	ms = round(spec.tv_nsec / 1.0e6)+s2*1000; // Convert nanoseconds to milliseconds
+	double ms = linuxTimeInMs();
 
 	switch(pis_compositor.state){
 
@@ -327,3 +358,30 @@ pis_compositorErrors pis_doCompositor()
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
+
+
+/*
+void loadImages(uint16_t width, uint16_t height)
+{
+	DIR           *d;
+	struct dirent *dir;
+	d = opendir("/mnt/data/images/");
+
+	if(d == NULL){
+		printf("Error opening images directory.\n");
+	}
+
+	char fullname[1000];
+	if (d)
+	{
+		while ((dir = readdir(d)) != NULL)
+		{
+			if(strstr(dir->d_name, ".jpg") != NULL || strstr(dir->d_name, ".bmp") != NULL || strstr(dir->d_name, ".jpeg") != NULL ) {
+				printf("\nAdding: %s\n",dir->d_name);
+				sprintf(&fullname[0],"%s%s","/mnt/data/images/",dir->d_name);
+				//addImageToList(&fullname[0],width,height);
+			}
+		}
+	closedir(d);
+	}
+}*/

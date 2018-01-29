@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "ilclient/ilclient.h"
 #include "tricks.h"
+#include <stdbool.h>
 
 sImage *resizeImage2(char *img,
 		uint32_t srcWidth, uint32_t srcHeight, //pixels
@@ -11,6 +12,6 @@ sImage *resizeImage2(char *img,
 		uint16_t srcSliceHeight,
 		uint32_t outputWidth,
 		uint32_t outputHeight,
-		_Bool crop,
-		_Bool lockAspect
+		bool crop,
+		bool lockAspect
 		);

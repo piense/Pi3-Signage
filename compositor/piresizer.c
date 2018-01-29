@@ -2,6 +2,7 @@
 #include "stdio.h"
 #include "bcm_host.h"
 #include <stdint.h> 
+#include <stdbool.h>
 #include "piresizer.h"
 
 //I hate asserts
@@ -28,15 +29,21 @@ int resizeImage(OPENMAX_RESIZER* resizer,
 //this function cleans up the decoder.
 void resizeCleanup(OPENMAX_RESIZER* decoder);
 
-uint8_t *decodedPic = NULL;
-uint32_t decodedPicAt;
-uint32_t decodedPicWidth;
-uint32_t decodedPicHeight;
-
-OMX_PARAM_RESIZETYPE piResizeType;
-OMX_RESIZEMODETYPE piResizeModeType;
-
 #define TIMEOUT_MS 20
+
+struct {
+	uint32_t outputWidth;
+	uint32_t outputHeight;
+
+	uint8_t *inputImg;
+
+	uint8_t *decodedPic;
+	uint32_t decodedPicAt;
+
+	OMX_PARAM_RESIZETYPE piResizeType;
+	OMX_RESIZEMODETYPE piResizeModeType;
+
+} pis_resizer;
 
 typedef struct _COMPONENT_DETAILS {
     COMPONENT_T    *component;
@@ -48,14 +55,12 @@ typedef struct _COMPONENT_DETAILS {
 struct _OPENMAX_RESIZER{
     ILCLIENT_T     *client;
     COMPONENT_DETAILS *imageResizer;
-    OMX_BUFFERHEADERTYPE **ppInputBufferHeader;
+    OMX_BUFFERHEADERTYPE *pInputBufferHeader;
     int             inputBufferHeaderCount;
     OMX_BUFFERHEADERTYPE *pOutputBufferHeader;
 };
 
 OMX_ERRORTYPE OMX_GetDebugInformation (OMX_OUT OMX_STRING debugInfo, OMX_INOUT OMX_S32 *pLen);
-
-uint16_t inputWidth, inputHeight, outputWidth, outputHeight;
 
 #define DEBUG_LEN 4096
 OMX_STRING debug_info;
@@ -66,6 +71,7 @@ void resize_print_debug() {
     debug_info[0] = 0;
     OMX_GetDebugInformation(debug_info, &len);
     fprintf(stderr, debug_info);
+    free(debug_info);
 }
 
 void resizePrintPort(OMX_HANDLETYPE componentHandle, OMX_U32 portno){
@@ -221,40 +227,30 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
 
     portdef.format.image.eCompressionFormat = OMX_IMAGE_CodingUnused;
     portdef.format.image.bFlagErrorConcealment = OMX_FALSE;
-    portdef.format.image.nFrameWidth = outputWidth;
-    portdef.format.image.nFrameHeight = outputHeight;
-	portdef.format.image.nStride = 0;
+    portdef.format.image.nFrameWidth = pis_resizer.outputWidth;
+    portdef.format.image.nFrameHeight = pis_resizer.outputHeight;
+	portdef.format.image.nStride = pis_resizer.outputWidth*4;
 	portdef.format.image.nSliceHeight = 0;
-	portdef.nBufferSize=outputWidth*outputHeight*4;
 
     int ret = OMX_SetParameter(decoder->imageResizer->handle,
 		     OMX_IndexParamPortDefinition, &portdef);
 
     if(ret != OMX_ErrorNone)
-        	printf("portSettingsChanged: Error %x enabling buffers.\n",ret);
+        	printf("portSettingsChanged1: Error %x enabling buffers.\n",ret);
+
+    OMX_GetParameter(decoder->imageResizer->handle,
+		     OMX_IndexParamPortDefinition, &portdef);
+
+    pis_resizer.decodedPic = malloc(portdef.nBufferSize);
+	if(pis_resizer.decodedPic == NULL){
+		printf("Pi Resizer: Failed to allocated output image.\n");
+		return -1;
+	}
 
     //Allocated the buffers and enables the port
     ret = ilclient_enable_port_buffers(decoder->imageResizer->component, decoder->imageResizer->outPort, NULL, NULL, NULL);
     if(ret != OMX_ErrorNone)
-    	printf("portSettingsChanged: Error %d enabling buffers.\n",ret);
-
-    // Get the image dimensions
-    //TODO: Store color format too
-    portdef.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
-    portdef.nVersion.nVersion = OMX_VERSION;
-    portdef.nPortIndex = decoder->imageResizer->outPort;
-    OMX_GetParameter(decoder->imageResizer->handle,
-		     OMX_IndexParamPortDefinition, &portdef);
-
-    unsigned int    uWidth =
-	(unsigned int) portdef.format.image.nFrameWidth;
-    unsigned int    uHeight =
-	(unsigned int) portdef.format.image.nFrameHeight;
-
-    printf("Image dimensions: %d %d\n",uWidth, uHeight);
-
-    decodedPicWidth = uWidth;
-    decodedPicHeight = uHeight;
+    	printf("portSettingsChanged2: Error %d enabling buffers.\n",ret);
 
     //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->inPort);
     //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->outPort);
@@ -265,6 +261,7 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
 int
 prepareImageResizer(OPENMAX_RESIZER * resizer)
 {
+	//TODO: Free this malloc'd memory
 	resizer->imageResizer = malloc(sizeof(COMPONENT_DETAILS));
     if (resizer->imageResizer == NULL) {
 		perror("malloc image decoder");
@@ -308,7 +305,8 @@ prepareImageResizer(OPENMAX_RESIZER * resizer)
 }
 
 int
-startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHeight, uint16_t srcSize, uint16_t srcStride, uint16_t srcSliceHeight)
+startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHeight,
+		uint32_t srcSize, uint16_t srcStride, uint16_t srcSliceHeight)
 {
     // move to idle
     if(ilclient_change_component_state(resizer->imageResizer->component,
@@ -349,34 +347,27 @@ startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHe
     if(ret != OMX_ErrorNone)
     	printf("Error %x setting input port config.\n", ret);
 
-    // get buffer requirements
-    portdef.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
-    portdef.nVersion.nVersion = OMX_VERSION;
-    portdef.nPortIndex = resizer->imageResizer->inPort;
-    OMX_GetParameter(resizer->imageResizer->handle,
-		     OMX_IndexParamPortDefinition, &portdef);
+    // enable the input port
+    ret = OMX_SendCommand(resizer->imageResizer->handle,
+    		OMX_CommandPortEnable, resizer->imageResizer->inPort, NULL);
+    if (ret != 0) {
+		fprintf(stderr, "Error enabling input port %x\n", ret);
+		return -1;//TODO: find a more descriptive error in the enum
+    }
 
-    // enable the port and setup the buffers
-    OMX_SendCommand(resizer->imageResizer->handle,
-		    OMX_CommandPortEnable,
-		    resizer->imageResizer->inPort, NULL);
-    resizer->inputBufferHeaderCount = portdef.nBufferCountActual;
-    // allocate pointer array
-    resizer->ppInputBufferHeader =
-	(OMX_BUFFERHEADERTYPE **) malloc(sizeof(void) *
-			resizer->inputBufferHeaderCount);
-    // allocate each buffer
-    int             i;
-    for (i = 0; i < resizer->inputBufferHeaderCount; i++) {
-		if (OMX_AllocateBuffer(resizer->imageResizer->handle,
-					   &resizer->ppInputBufferHeader[i],
+
+    ret = OMX_UseBuffer(resizer->imageResizer->handle,
+					   &resizer->pInputBufferHeader,
 					   resizer->imageResizer->inPort,
 					   (void *) NULL,
-					   portdef.nBufferSize) != OMX_ErrorNone) {
-			perror("Allocate decode buffer");
+					   srcSize,
+					   pis_resizer.inputImg);
+	if(ret != OMX_ErrorNone) {
+			printf("Allocate resize input buffer, err: %x\n",ret);
 			return OMXJPEG_ERROR_MEMORY;
 		}
-    }
+	resizer->pInputBufferHeader->nFilledLen = srcSize;
+	resizer->pInputBufferHeader->nFlags = OMX_BUFFERFLAG_EOS;
 
     // wait for port enable to complete - which it should once buffers are
     // assigned
@@ -413,7 +404,8 @@ startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHe
 
 // this function run the boilerplate to setup the openmax components;
 int
-setupOpenMaxResizer(OPENMAX_RESIZER ** resizer, uint16_t srcWidth, uint16_t srcHeight, uint32_t srcSize, uint16_t srcStride, uint16_t srcSliceHeight )
+setupOpenMaxResizer(OPENMAX_RESIZER ** resizer, uint16_t srcWidth,
+		uint16_t srcHeight, uint32_t srcSize, uint16_t srcStride, uint16_t srcSliceHeight )
 {
     *resizer = malloc(sizeof(OPENMAX_RESIZER));
     if (resizer[0] == NULL) {
@@ -462,49 +454,14 @@ int
 resizeImage(OPENMAX_RESIZER* resizer,
               char *sourceImage, size_t imageSize, uint32_t imageWidth, uint32_t imageHeight)
 {
-    char           *sourceOffset = sourceImage;	// we store a separate
-						// buffer to image so we
-						// can offset it
-    size_t toread = 0;	// bytes left to read from buffer
-    toread += imageSize;
     int gotEos = 0;
-    int bufferIndex = 0;
 
     //TODO: figure out better structure for this
 
-	// get next buffer from array
-	OMX_BUFFERHEADERTYPE *pBufHeader =
-			resizer->ppInputBufferHeader[bufferIndex];
-
-	// step index and reset to 0 if required
-	bufferIndex++;
-	if (bufferIndex >= resizer->inputBufferHeaderCount)
-		bufferIndex = 0;
-
-	// work out the next chunk to load into the decoder
-	// (should be the whole image or we'll have a problem)
-	if (toread > pBufHeader->nAllocLen)
-		pBufHeader->nFilledLen = pBufHeader->nAllocLen;
-	else
-		pBufHeader->nFilledLen = toread;
-
-	toread = toread - pBufHeader->nFilledLen;
-
-	// pass the bytes to the buffer
-	// (Moving too much data around, should use tunneling or the existing buffer)
-	memcpy(pBufHeader->pBuffer, sourceOffset, pBufHeader->nFilledLen);
-
-	// update the buffer pointer and set the input flags
-	sourceOffset = sourceOffset + pBufHeader->nFilledLen;
-	pBufHeader->nOffset = 0;
-	pBufHeader->nFlags = 0;
-	if (toread <= 0) {
-		pBufHeader->nFlags = OMX_BUFFERFLAG_EOS;
-	}
 	// empty the current buffer
-	int             ret =
+	int ret =
 		OMX_EmptyThisBuffer(resizer->imageResizer->handle,
-				pBufHeader);
+				resizer->pInputBufferHeader);
 
 	if (ret != OMX_ErrorNone) {
 		perror("Empty input buffer");
@@ -533,13 +490,9 @@ resizeImage(OPENMAX_RESIZER* resizer,
 			temp=buff_header;
 
 			//Copy output port buffer to output image buffer
-			//TODO: bounds checking, point the output buffer to chunks of the main buffer to avoid memory copying
-		    uint32_t i;
-		    //printf("Filled: %d\n",buff_header->nFilledLen);
-		    for(i=0;i<buff_header->nFilledLen;i++){
-		    	decodedPic[decodedPicAt] = *(buff_header->pBuffer + buff_header->nOffset + i);
-		    	decodedPicAt++;
-		    }
+
+			memcpy(&pis_resizer.decodedPic[pis_resizer.decodedPicAt],buff_header->pBuffer + buff_header->nOffset,buff_header->nFilledLen);
+			pis_resizer.decodedPicAt += buff_header->nFilledLen;
 
 		    //See if we've reached the end of the stream
 		    //TODO: handle case when we never get EOS
@@ -557,7 +510,7 @@ resizeImage(OPENMAX_RESIZER* resizer,
 		}
     }
 
-    printf("Resizer transfered %d bytes\n",decodedPicAt);
+    //printf("Resizer transfered %d bytes\n",pis_resizer.decodedPicAt);
 
     return OMXJPEG_OK;
 }
@@ -588,19 +541,14 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
     if(ret != 0)
     	printf("Error disabling image decoder input port: %d\n",ret);
 
-    int             i = 0;
-    for (i = 0; i < resizer->inputBufferHeaderCount; i++) {
-	OMX_BUFFERHEADERTYPE *vpBufHeader =
-			resizer->ppInputBufferHeader[i];
-
-	OMX_FreeBuffer(resizer->imageResizer->handle,
-			resizer->imageResizer->inPort, vpBufHeader);
-    }
-
     ilclient_wait_for_event(resizer->imageResizer->component,
 			    OMX_EventCmdComplete, OMX_CommandPortDisable,
 			    0, resizer->imageResizer->inPort, 0, 0,
 			    TIMEOUT_MS);
+
+    OMX_FreeBuffer(resizer->imageResizer->handle,
+    		resizer->imageResizer->inPort,
+		   resizer->pInputBufferHeader);
 
     ret = OMX_SendCommand(resizer->imageResizer->handle, OMX_CommandPortDisable,
     		resizer->imageResizer->outPort, NULL);
@@ -640,32 +588,44 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
     }
 }
 
+//TODO: Return error codes instead
 sImage *resizeImage2(char *img,
 		uint32_t srcWidth, uint32_t srcHeight, //pixels
 		size_t srcSize, //bytes
 		OMX_COLOR_FORMATTYPE imgCoding,
 		uint16_t srcStride,
 		uint16_t srcSliceHeight,
-		uint32_t output2Width,
-		uint32_t output2Height,
-		_Bool crop,
-		_Bool lockAspect
+		uint32_t outputWidth,
+		uint32_t outputHeight,
+		bool crop,
+		bool lockAspect
 		)
 		//TODO Colorspace
 {
-	//TODO: Handle input size = output size
+	//TODO: Handle resize modes
 
-	//TODO move this to when we get the final image size
-	decodedPic = malloc(1920*1080*5);
-	memset(decodedPic,0,1920*1080*5);
-	decodedPicAt = 0;
+	float inRatio, outRatio;
+
+	if(lockAspect == true && crop == false)
+	{
+		inRatio = ((float)srcWidth)/srcHeight;
+		outRatio = ((float)outputWidth)/outputHeight;
+		if(inRatio < outRatio)
+		{
+			outputWidth = ((float)outputHeight)*inRatio;
+		}else{
+			outputHeight = inRatio/((float)outputWidth);
+		}
+	}else if(lockAspect == true && crop == true){
+		//TODO: Cropping image
+	}
+
+	pis_resizer.inputImg = (uint8_t *)img;
+	pis_resizer.decodedPicAt = 0;
+	pis_resizer.outputHeight = outputHeight;
+	pis_resizer.outputWidth = outputWidth;
 
 	//TODO: Check imgCoding is supported by resizer
-
-	inputWidth = srcWidth;
-	inputHeight = srcHeight;
-	outputWidth = 1920;
-	outputHeight = 1080;
 
     OPENMAX_RESIZER *pDecoder;
     int             s;
@@ -677,7 +637,7 @@ sImage *resizeImage2(char *img,
     	return NULL;
     }
 
-    s = resizeImage(pDecoder, img, srcWidth, srcWidth, srcHeight);
+    s = resizeImage(pDecoder, img, srcSize, srcWidth, srcHeight);
 
     if(s != 0){
     	printf("resizeImage: Error resizing image.\n");
@@ -687,9 +647,10 @@ sImage *resizeImage2(char *img,
     resizeCleanup(pDecoder);
 
     sImage *ret = malloc(sizeof(sImage));
-    ret->imageBuf = decodedPic;
-    ret->imageWidth=decodedPicWidth;
-    ret->imageHeight=decodedPicHeight;
+
+    ret->imageBuf = pis_resizer.decodedPic;
+    ret->imageWidth=pis_resizer.outputWidth;
+    ret->imageHeight=pis_resizer.outputHeight;
 
     //TODO return struct & value
     return ret;

@@ -6,6 +6,10 @@
 //External Libs
 #include "bcm_host.h"
 #include "vgfont/vgfont.h"
+#include "piDisplayRender.h"
+
+pis_window *backWindow;
+pis_window *dissolveWindow;
 
 #define PIS_COLOR_ARGB_BLACK 0xFF000000
 #define PIS_COLOR_ARGB_WHITE 0xFFFFFFFF

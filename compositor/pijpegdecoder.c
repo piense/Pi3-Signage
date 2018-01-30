@@ -127,6 +127,30 @@ void printPort(OMX_HANDLETYPE componentHandle, OMX_U32 portno){
     			portdef.format.image.nSliceHeight,portdef.format.image.bFlagErrorConcealment == 1 ? "True" : "False", coding, portdef.format.image.eColorFormat );
     }
 
+    if(portdef.eDomain == OMX_PortDomainVideo){
+
+    	char coding[20];
+
+
+        switch(portdef.format.image.eCompressionFormat){
+        	case OMX_VIDEO_CodingUnused: strcpy(coding,"Unused"); break;
+        	case OMX_VIDEO_CodingAutoDetect: strcpy(coding,"Auto Detect"); break;
+        	case OMX_VIDEO_CodingMPEG2: strcpy(coding,"MPEG2"); break;
+        	case OMX_VIDEO_CodingH263: strcpy(coding,"H.263"); break;
+        	case OMX_VIDEO_CodingMPEG4: strcpy(coding,"MPEG4"); break;
+        	case OMX_VIDEO_CodingWMV: strcpy(coding,"WMV"); break;
+        	case OMX_VIDEO_CodingRV: strcpy(coding,"RV"); break;
+        	default: strcpy(coding,"???");
+        }
+
+    	printf("\tBitrate: %d\n\tWidth: %d\n\tHeight: %d\n"
+    			"\tStride: %d\n\tSlice Height: %d\n\t"
+    			"Flag Error Concealment: %s\n\tCompression Format: %s\n\tColor Format: %d\n",
+    			portdef.format.video.nBitrate,portdef.format.video.nFrameWidth,portdef.format.video.nFrameHeight,
+				portdef.format.video.nStride,portdef.format.video.nSliceHeight,
+				portdef.format.video.bFlagErrorConcealment == 1 ? "True" : "False", coding, portdef.format.video.eColorFormat );
+    }
+
 }
 
 void eos_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {

@@ -16,6 +16,7 @@
 #include "piresizer.h"
 #include "tricks.h"
 #include "textoverlay.h"
+#include "piDisplayRender.h"
 
 double linuxTimeInMs()
 {
@@ -134,30 +135,9 @@ pis_compositorErrors pis_initializeCompositor()
 	pis_compositor.screenWidth = 1920;
 	pis_compositor.screenHeight = 1080;
 
-	//Demo slides
+	bcm_host_init();
 
-	pis_slides_s *newSlide;
-
-	pis_addNewSlide(&newSlide, 1000,10000,"Slide 1");
-
-	pis_compositor.slides = newSlide;
-
-	pis_AddTextToSlide(newSlide,"Theodore David McVay","",200.0/1920.0,.3,.95,0xFFFF0000);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.5,.5,
-			1,1,pis_SIZE_SCALE);
-
-	pis_addNewSlide(&newSlide, 1000,10000,"Slide 3");
-
-	pis_AddTextToSlide(newSlide,"Ollie!","",200.0/1920.0,.1,.95,0xFFFF0000);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.5,.5,
-					1,1,pis_SIZE_SCALE);
-
-	pis_compositor.currentSlide = pis_compositor.slides;
-
-	//-----
-
+	/*
 
 	vc_gencmd_init();
 
@@ -201,6 +181,7 @@ pis_compositorErrors pis_initializeCompositor()
 
 	graphics_update_displayed_resource(pis_compositor.backImg, 0, 0, 0, 0);
 	graphics_update_displayed_resource(pis_compositor.dissolveImg, 0, 0, 0, 0);
+	*/
 
 	//pis_compositor.slides = NULL;
 	//pis_compositor.currentSlide = NULL;
@@ -210,31 +191,69 @@ pis_compositorErrors pis_initializeCompositor()
 	pis_compositor.slideStartTime = 0;
 	pis_compositor.slideDissolveTime = 0;
 
+	//Demo slides
 
+	pis_slides_s *newSlide;
+
+	pis_addNewSlide(&newSlide, 1000,3000,"Slide 1");
+
+	pis_compositor.slides = newSlide;
+
+	pis_AddTextToSlide(newSlide,"Theodore David McVay","",200.0/1920.0,.3,.95,0xFFFF0000);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.5,.5,
+			1,1,pis_SIZE_SCALE);
+
+	pis_addNewSlide(&newSlide, 1000,3000,"Slide 3");
+
+	pis_AddTextToSlide(newSlide,"Ollie!","",200.0/1920.0,.1,.95,0xFFFF0000);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.5,.5,
+					1,1,pis_SIZE_SCALE);
+
+	pis_compositor.currentSlide = pis_compositor.slides;
+
+	//-----
+
+	backWindow = pis_NewRenderWindow(1);
+	dissolveWindow = pis_NewRenderWindow(2);
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
 pis_compositorErrors pis_compositorcleanup()
 {
-	graphics_delete_resource(pis_compositor.dissolveImg);
+	//graphics_delete_resource(pis_compositor.dissolveImg);
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
 int thisNumber = 0;
 
-pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides_s *slide)
+pis_compositorErrors pis_compositeSlide(pis_window *window, pis_slides_s *slide)
 {
 	pis_mediaElementList_s *current = slide->mediaElementsHead;
 
-	graphics_resource_fill(res, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+	//graphics_resource_fill(res, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+
+	pis_fillBuf(window,0xFF000000);
 
 	while(current != NULL){
 		switch(current->mediaElement.mediaType){
 			case pis_MEDIA_IMAGE:
 				//TODO: range check width & height
-				graphics_userblt(GRAPHICS_RESOURCE_RGBA32,
+
+				pis_bufCopy(window, ((pis_mediaImage *)current->mediaElement.data)->cache.img,
+									0,0,
+								((pis_mediaImage *)current->mediaElement.data)->cache.width
+								,((pis_mediaImage *)current->mediaElement.data)->cache.height,
+								(uint32_t)(((pis_mediaImage *)current->mediaElement.data)->x*pis_compositor.screenWidth
+										-((float)((pis_mediaImage *)current->mediaElement.data)->cache.width)/2.0),
+								(uint32_t)(((pis_mediaImage *)current->mediaElement.data)->y*pis_compositor.screenHeight
+										-((float)((pis_mediaImage *)current->mediaElement.data)->cache.height)/2.0));
+
+
+				/*graphics_userblt(GRAPHICS_RESOURCE_RGBA32,
 						((pis_mediaImage *)current->mediaElement.data)->cache.img,
 						0,0,
 						((pis_mediaImage *)current->mediaElement.data)->cache.width
@@ -246,7 +265,7 @@ pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides
 						,
 						(uint32_t)(((pis_mediaImage *)current->mediaElement.data)->y*pis_compositor.screenHeight
 														-((float)((pis_mediaImage *)current->mediaElement.data)->cache.height)/2.0)
-						);
+						);*/
 				break;
 
 			//TODO:
@@ -256,11 +275,11 @@ pis_compositorErrors pis_compositeSlide(GRAPHICS_RESOURCE_HANDLE res, pis_slides
 			case pis_MEDIA_TEXT:
 				//TODO: Support other fonts
 				//TODO: Range check font size and positions
-				render_subtitle(res,((pis_mediaText *)current->mediaElement.data)->text,0,
+				/*render_subtitle(res,((pis_mediaText *)current->mediaElement.data)->text,0,
 						(uint32_t)(((pis_mediaText *)current->mediaElement.data)->fontHeight * pis_compositor.screenHeight),
 						(uint32_t)(((pis_mediaText *)current->mediaElement.data)->y * pis_compositor.screenHeight),
 						((pis_mediaText *)current->mediaElement.data)->color
-						);
+						);*/
 
 				break;
 
@@ -298,17 +317,18 @@ pis_compositorErrors pis_doCompositor()
 			pis_compositor.slideStartTime = ms;
 
 			if(pis_compositor.currentSlide != NULL){
-				pis_compositeSlide(pis_compositor.backImg,pis_compositor.currentSlide);
+				pis_compositeSlide(backWindow,pis_compositor.currentSlide);
 			}else{
-				graphics_resource_fill(pis_compositor.backImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+				pis_fillBuf(backWindow,0xFF000000);
+				//graphics_resource_fill(pis_compositor.backImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
 			}
 
-			graphics_display_resource(pis_compositor.backImg, 0, 0, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 1, VC_DISPMAN_ROT0, 1);
+			pis_updateScreen(backWindow);
+			//graphics_display_resource(pis_compositor.backImg, 0, 0, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 1, VC_DISPMAN_ROT0, 1);
 			pis_compositor.state = 2;
 			break;
 
-		//Forget why this is here but I think it prevents flickering while layers are shuffled
-		case 2: opacity=0; pis_compositor.state = 3; break;
+		case 2: opacity = 0; pis_compositor.state = 3; break;
 
 		//Render the next slide to the dissolve layer
 		case 3:
@@ -316,7 +336,8 @@ pis_compositorErrors pis_doCompositor()
 			if(pis_compositor.currentSlide == NULL)
 			{
 				//No current slide, fade to black
-				graphics_resource_fill(pis_compositor.dissolveImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+				//graphics_resource_fill(pis_compositor.dissolveImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+				pis_fillBuf(dissolveWindow,0xFF000000);
 				pis_compositor.slideDissolveTime = 1000;
 				pis_compositor.slideHoldTime = 1000;
 				pis_compositor.state = 4;
@@ -334,12 +355,14 @@ pis_compositorErrors pis_doCompositor()
 			}
 
 			if(pis_compositor.currentSlide != NULL){
-				pis_compositeSlide(pis_compositor.dissolveImg,pis_compositor.currentSlide);
+				pis_compositeSlide(dissolveWindow,pis_compositor.currentSlide);
 			}else{
-				graphics_resource_fill(pis_compositor.dissolveImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
+				pis_fillBuf(dissolveWindow,0xFF000000);
+				//graphics_resource_fill(pis_compositor.dissolveImg, 0,0,pis_compositor.screenWidth, pis_compositor.screenHeight,PIS_COLOR_ARGB_BLACK);
 			}
 
-			graphics_display_resource(pis_compositor.dissolveImg, 0, 1, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 0, VC_DISPMAN_ROT0, 1);
+			pis_updateScreen(dissolveWindow);
+			//graphics_display_resource(pis_compositor.dissolveImg, 0, 1, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, 0, VC_DISPMAN_ROT0, 1);
 
 			pis_compositor.state = 4;
 
@@ -354,7 +377,8 @@ pis_compositorErrors pis_doCompositor()
 			break;
 	}
 
-	graphics_display_resource(pis_compositor.dissolveImg, 0, 1, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, opacity, VC_DISPMAN_ROT0, 1);
+	pis_setWindowOpacity(dissolveWindow, opacity);
+	//graphics_display_resource(pis_compositor.dissolveImg, 0, 1, 0, 0, GRAPHICS_RESOURCE_WIDTH, GRAPHICS_RESOURCE_HEIGHT, opacity, VC_DISPMAN_ROT0, 1);
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }

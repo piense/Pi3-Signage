@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "compositor/compositor.h"
+#include "dispmanx.h"
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -16,6 +17,9 @@
 
 int main(int argc, char *argv[])
 {
+
+	//dispMaxDemo();
+
 	pis_initializeCompositor();
 
 	while(1)

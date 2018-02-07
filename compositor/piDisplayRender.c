@@ -17,26 +17,55 @@ void error_callback2(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
     //printf("OMX error %x\n", data);
 }
 
-void pis_fillBuf(pis_window *window, uint32_t color)
+uint32_t *pis_getBuf(pis_window *window)
 {
-	uint32_t x,y;
-	for(x = 0;x<window->screenWidth;x++)
-		for(y = 0;y<window->screenHeight;y++)
-			window->bufImages[window->lastBufUsed][x+y*window->screenWidth] = color;
+	return window->bufImages[window->nextDispBuf];
 }
 
+void pis_fillBuf(pis_window *window, uint32_t color)
+{
+	uint32_t x;
+
+	for(x = 0;x<window->screenWidth;x++)
+			window->bufImages[window->nextDispBuf][x] = color;
+
+ 	uint32_t y;
+ 	uint8_t * pos = (uint8_t *)&window->bufImages[window->nextDispBuf][window->screenWidth];
+ 	uint32_t stride = window->screenWidth*4;
+	for(y = 1;y<window->screenHeight;y++){
+			memcpy(pos,
+					&window->bufImages[window->nextDispBuf][0],
+					stride);
+			pos += stride;
+	}
+
+}
+
+struct {
+	pis_window *window; uint32_t *img;
+			uint32_t srcX; uint32_t srcY;
+			uint32_t srcWidth; uint32_t srcHeight;
+			uint32_t dstX; uint32_t dstY;
+}pis_bufCopyS;
+
+//TODO:
+//Currently an odd way to define the regions
 void pis_bufCopy(pis_window *window, uint32_t *img,
 		uint32_t srcX, uint32_t srcY,
 		uint32_t srcWidth, uint32_t srcHeight,
 		uint32_t dstX, uint32_t dstY)
 {
-	uint32_t u,v;
+	uint32_t v;
 
 	//TODO: Bounds checking
 
-	for(u = srcX;u<srcWidth+srcX;u++)
-		for(v = srcY;v<srcHeight+srcY;v++)
-			window->bufImages[window->lastBufUsed][u-srcX+dstX + (v-srcY+dstY)*window->screenWidth] = img[u+v*srcWidth];
+	uint32_t length = srcWidth*4;
+
+	for(v = 0;v<srcHeight;v++)
+	{
+		memcpy(&window->bufImages[window->nextDispBuf][(v+dstY)*window->screenWidth + dstX],
+				&img[v*srcWidth],length);
+	}
 }
 
 void createComponent(pis_window *window)
@@ -46,6 +75,10 @@ void createComponent(pis_window *window)
 			perror("DR ilclient_init");
 			return; //TODO Error codes
 	    }
+
+	/*ilclient_set_empty_buffer_done_callback(window->client,
+			EmptyBufferDoneCallback,
+	    			NULL);*/
 
     if (OMX_Init() != OMX_ErrorNone) {
 		ilclient_destroy(window->client);
@@ -163,7 +196,7 @@ void initDisplayRegion(pis_window *window)
 		window->ppInputBufferHeaders[i]->nFilledLen = window->bufSize;
     }
 
-    window->lastBufUsed = 0;
+    window->nextDispBuf = 0;
 
     // wait for port enable to complete - which it should once buffers are
     // assigned
@@ -220,10 +253,10 @@ void pis_setWindowOpacity(pis_window *window, float opacity)
 
 void pis_updateScreen(pis_window *window)
 {
-	window->ppInputBufferHeaders[window->lastBufUsed]->nFilledLen = window->screenWidth*window->screenHeight*4;
+	window->ppInputBufferHeaders[window->nextDispBuf]->nFilledLen = window->screenWidth*window->screenHeight*4;
 	OMX_EmptyThisBuffer(window->component.handle,
-				window->ppInputBufferHeaders[window->lastBufUsed]);
-	window->lastBufUsed = (window->lastBufUsed + 1) % window->inputBufferHeaderCount;
+				window->ppInputBufferHeaders[window->nextDispBuf]);
+	window->nextDispBuf = (window->nextDispBuf + 1) % window->inputBufferHeaderCount;
 }
 
 pis_window *pis_NewRenderWindow(uint8_t layer)

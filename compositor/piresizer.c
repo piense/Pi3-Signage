@@ -34,6 +34,7 @@ void resizeCleanup(OPENMAX_RESIZER* decoder);
 struct {
 	uint32_t outputWidth;
 	uint32_t outputHeight;
+	uint32_t outputStride;
 
 	uint8_t *inputImg;
 
@@ -207,6 +208,11 @@ void resize_error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
     printf("OMX error %s\n", resizeerr2str(data));
 }
 
+
+#ifndef ALIGN_UP
+#define ALIGN_UP(x,y)  ((x + (y)-1) & ~((y)-1))
+#endif
+
 //Called from resizeImage once the decoder has read the file header and
 //changed the output port settings for the image
 int
@@ -229,7 +235,8 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
     portdef.format.image.bFlagErrorConcealment = OMX_FALSE;
     portdef.format.image.nFrameWidth = pis_resizer.outputWidth;
     portdef.format.image.nFrameHeight = pis_resizer.outputHeight;
-	portdef.format.image.nStride = pis_resizer.outputWidth*4;
+	//portdef.format.image.nStride = pis_resizer.outputWidth*4;
+    portdef.format.image.nStride = ALIGN_UP(pis_resizer.outputWidth,16)*4;
 	portdef.format.image.nSliceHeight = 0;
 
     int ret = OMX_SetParameter(decoder->imageResizer->handle,
@@ -240,6 +247,8 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
 
     OMX_GetParameter(decoder->imageResizer->handle,
 		     OMX_IndexParamPortDefinition, &portdef);
+
+    pis_resizer.outputStride = portdef.format.image.nStride;
 
     pis_resizer.decodedPic = malloc(portdef.nBufferSize);
 	if(pis_resizer.decodedPic == NULL){
@@ -651,6 +660,7 @@ sImage *resizeImage2(char *img,
     ret->imageBuf = pis_resizer.decodedPic;
     ret->imageWidth=pis_resizer.outputWidth;
     ret->imageHeight=pis_resizer.outputHeight;
+    ret->stride = pis_resizer.outputStride;
 
     //TODO return struct & value
     return ret;

@@ -26,6 +26,7 @@ typedef struct pis_img
 	uint32_t *img;
 	uint32_t width;
 	uint32_t height;
+	uint32_t stride;
 }pis_img;
 
 typedef enum pis_compositorErrors
@@ -61,6 +62,9 @@ typedef struct pis_mediaImage
 	char *filename;
 	pis_mediaSizing sizing;
 	pis_img cache;
+	DISPMANX_RESOURCE_HANDLE_T res;
+	DISPMANX_ELEMENT_HANDLE_T element;
+	uint32_t imgHandle;
 } pis_mediaImage;
 
 typedef struct pis_mediaVideo
@@ -77,6 +81,9 @@ typedef struct pis_mediaText
 	char *fontName;
 	char *text;
 	uint32_t color;
+	DISPMANX_RESOURCE_HANDLE_T res;
+	DISPMANX_ELEMENT_HANDLE_T element;
+	uint32_t imgHandle;
 }pis_mediaText;
 
 typedef struct pis_mediaAudio

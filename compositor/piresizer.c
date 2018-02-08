@@ -236,7 +236,7 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
     portdef.format.image.nFrameWidth = pis_resizer.outputWidth;
     portdef.format.image.nFrameHeight = pis_resizer.outputHeight;
 	//portdef.format.image.nStride = pis_resizer.outputWidth*4;
-    portdef.format.image.nStride = ALIGN_UP(pis_resizer.outputWidth,16)*4;
+    portdef.format.image.nStride = ALIGN_UP(pis_resizer.outputWidth,32)*4;
 	portdef.format.image.nSliceHeight = 0;
 
     int ret = OMX_SetParameter(decoder->imageResizer->handle,
@@ -256,10 +256,13 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
 		return -1;
 	}
 
-    //Allocated the buffers and enables the port
+	//print_debug();
+
+    //Allocate the buffers and enables the port
     ret = ilclient_enable_port_buffers(decoder->imageResizer->component, decoder->imageResizer->outPort, NULL, NULL, NULL);
-    if(ret != OMX_ErrorNone)
+    if(ret != OMX_ErrorNone){
     	printf("portSettingsChanged2: Error %d enabling buffers.\n",ret);
+    }
 
     //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->inPort);
     //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->outPort);
@@ -385,7 +388,7 @@ startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHe
 				OMX_EventCmdComplete,
 				OMX_CommandPortEnable, 0,
 				resizer->imageResizer->inPort, 0,
-				0, TIMEOUT_MS);
+				ILCLIENT_PORT_ENABLED, TIMEOUT_MS);
     if (ret != 0) {
 		fprintf(stderr, "Did not get port enable %d\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
@@ -401,7 +404,7 @@ startupImageResizer(OPENMAX_RESIZER * resizer, uint16_t srcWidth, uint16_t srcHe
 
     ret = ilclient_wait_for_event(resizer->imageResizer->component,
 				  OMX_EventCmdComplete,
-				  OMX_CommandStateSet, 0, OMX_StateExecuting, 0, 0,
+				  OMX_CommandStateSet, 0, OMX_StateExecuting, 0, ILCLIENT_STATE_CHANGED,
 				  TIMEOUT_MS);
     if (ret != 0) {
     	fprintf(stderr, "Did not receive executing stat %d\n", ret);
@@ -534,7 +537,7 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
 		    NULL);
     int ret = ilclient_wait_for_event(resizer->imageResizer->component,
 			    OMX_EventCmdComplete, OMX_CommandFlush, 0,
-			    resizer->imageResizer->outPort, 0, 0,
+			    resizer->imageResizer->outPort, 0, ILCLIENT_PORT_FLUSH,
 			    TIMEOUT_MS);
     if(ret != 0)
     	printf("Error flushing decoder commands: %d\n", ret);
@@ -552,8 +555,8 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
 
     ilclient_wait_for_event(resizer->imageResizer->component,
 			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, resizer->imageResizer->inPort, 0, 0,
-			    TIMEOUT_MS);
+			    0, resizer->imageResizer->inPort, 0,
+				ILCLIENT_PORT_DISABLED, TIMEOUT_MS);
 
     OMX_FreeBuffer(resizer->imageResizer->handle,
     		resizer->imageResizer->inPort,
@@ -565,13 +568,16 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
     	printf("1 Error disabling output port %d\n",ret);
     }
 
+    vcos_free(temp->pBuffer);
+
     OMX_FreeBuffer(resizer->imageResizer->handle,
     		resizer->imageResizer->outPort,
 		   temp);
 
     ret =  ilclient_wait_for_event(resizer->imageResizer->component,
 			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, resizer->imageResizer->outPort, 0, 0,
+			    0, resizer->imageResizer->outPort, 0,
+				ILCLIENT_PORT_DISABLED,
 			    TIMEOUT_MS);
     if(ret != 0) printf("2 Error disabling output port %d\n",ret);
 
@@ -586,6 +592,11 @@ resizeCleanup(OPENMAX_RESIZER * resizer)
     //Change the components state to loaded. the ilclient will also wait to confirm the event
     ret = ilclient_change_component_state(resizer->imageResizer->component,
 				    OMX_StateLoaded);
+
+    COMPONENT_T  *list[2];
+    list[0] = resizer->imageResizer->component;
+    list[1] = (COMPONENT_T  *)NULL;
+    ilclient_cleanup_components(list);
 
     if(ret != 0)
     	printf("Transition to loaded failed\n");
@@ -612,6 +623,8 @@ sImage *resizeImage2(char *img,
 		//TODO Colorspace
 {
 	//TODO: Handle resize modes
+
+	printf("Resizer\n");
 
 	float inRatio, outRatio;
 

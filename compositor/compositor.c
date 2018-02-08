@@ -16,9 +16,9 @@
 #include "piresizer.h"
 #include "tricks.h"
 #include "textoverlay.h"
-#include "piDisplayRender.h"
 #include "fontTest.h"
 
+//TODO: put this in a struct and out of the global namespace
 DISPMANX_DISPLAY_HANDLE_T   display, offDisp1, offDisp2;
 DISPMANX_DISPLAY_HANDLE_T dissolveDisp, backDisp, tempDisp;
 uint32_t	offDisp1Buf, offDisp2Buf;
@@ -26,11 +26,14 @@ DISPMANX_MODEINFO_T         info;
 DISPMANX_UPDATE_HANDLE_T    update;
 DISPMANX_RESOURCE_HANDLE_T  offDisp1Resource, offDisp2Resource;
 DISPMANX_RESOURCE_HANDLE_T dissolveDispRes, backDispRes, tempDispRes;
-DISPMANX_ELEMENT_HANDLE_T   element;
+DISPMANX_ELEMENT_HANDLE_T   dispElement1, dispElement2, dissolveElement, backElement, tempElement;
 uint32_t                    vc_image_ptr;
 uint32_t					screen;
 VC_DISPMANX_ALPHA_T alpha, alphaDissolve;
 VC_RECT_T srcRect, screenRect;
+
+
+
 
 double linuxTimeInMs()
 {
@@ -149,6 +152,113 @@ pis_compositorErrors pis_AddImageToSlide(pis_slides_s *slide, char* file,
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
+void pis_removeSlideFromDisplay(pis_slides_s *slide)
+{
+	printf("Removing slide elements.\n");
+	double endTime;
+	double startTime2 = linuxTimeInMs();
+
+	pis_mediaElementList_s *current = slide->mediaElementsHead;
+
+	while(current != NULL){
+		switch(current->mediaElement.mediaType){
+			case pis_MEDIA_IMAGE:
+				;
+				pis_mediaImage* data = ((pis_mediaImage *)current->mediaElement.data);
+
+				if(data->element != 0){
+					vc_dispmanx_element_remove(update, data->element);
+				}
+
+				data->element = 0;
+				break;
+
+			//TODO:
+			case pis_MEDIA_VIDEO:
+
+				break;
+
+			case pis_MEDIA_TEXT:
+				;
+				pis_mediaText* dataTxt = ((pis_mediaText *)current->mediaElement.data);
+
+				if(dataTxt->element != 0)
+					vc_dispmanx_element_remove(update, dataTxt->element);
+
+				dataTxt->element = 0;
+				break;
+
+			//TODO:
+			case pis_MEDIA_AUDIO: break;
+		}
+		current = current->next;
+	}
+
+	endTime = linuxTimeInMs();
+	printf("Removed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
+
+	printf("-----\n");
+}
+
+void pis_freeSlideResource(pis_slides_s *slide)
+{
+	printf("clearing slide resources.\n");
+	double endTime;
+	double startTime2 = linuxTimeInMs();
+
+	pis_mediaElementList_s *current = slide->mediaElementsHead;
+
+	while(current != NULL){
+		switch(current->mediaElement.mediaType){
+			case pis_MEDIA_IMAGE:
+				;
+				pis_mediaImage* data = ((pis_mediaImage *)current->mediaElement.data);
+
+				if(data->element != 0)
+					printf("Deleting a resource in use, this will probably end poorly.\n");
+
+				if(data->cache.img != NULL)
+					free(data->cache.img);
+				data->cache.img = NULL;
+				data->cache.width =  0;
+				data->cache.height =  0;
+				data->cache.stride = 0;
+
+				if(data->res != 0)
+					vc_dispmanx_resource_delete(data->res);
+
+				data->res = 0;
+				break;
+
+			//TODO:
+			case pis_MEDIA_VIDEO:
+
+				break;
+
+			case pis_MEDIA_TEXT:
+				;
+				pis_mediaText* dataTxt = ((pis_mediaText *)current->mediaElement.data);
+
+				if(dataTxt->element != 0)
+					printf("Deleting a resource in use, this will probably end poorly.\n");
+
+				if(dataTxt->res != 0)
+					vc_dispmanx_resource_delete(data->res);
+				dataTxt->res = 0;
+				break;
+
+			//TODO:
+			case pis_MEDIA_AUDIO: break;
+		}
+		current = current->next;
+	}
+
+	endTime = linuxTimeInMs();
+	printf("Freed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
+
+	printf("-----\n");
+}
+
 void pis_loadSlideResources(pis_slides_s *slide)
 {
 	printf("Loading slide resources.\n");
@@ -198,7 +308,8 @@ void pis_loadSlideResources(pis_slides_s *slide)
 						printf("Resource already loaded.\n");
 					}
 
-					//free(data->cache.img);
+					free(data->cache.img);
+					data->cache.img = NULL;
 
 				printf("Image: %f\n",linuxTimeInMs()-startTime);
 				break;
@@ -225,10 +336,9 @@ void pis_loadSlideResources(pis_slides_s *slide)
 							pis_compositor.screenWidth,pis_compositor.screenHeight,
 							&((pis_mediaText *)current->mediaElement.data)->imgHandle);
 
-					//Might just put this malloc somewhere globally to avoid time allocating
+					//Might just put this malloc somewhere globally to avoid time allocating every time
 					uint32_t *temp=malloc(pis_compositor.screenWidth*pis_compositor.screenHeight*4);
 					memset(temp,0,pis_compositor.screenWidth*pis_compositor.screenHeight*4);
-
 
 					renderTextToScreen(temp,
 							pis_compositor.screenWidth, pis_compositor.screenHeight,
@@ -307,14 +417,14 @@ void pis_initDispmanx()
     alpha.mask = 0;
 
     alphaDissolve.flags = DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_MIX;
-    alphaDissolve.opacity = 0; /*alpha 0->255*/
+    alphaDissolve.opacity = 255; /*alpha 0->255*/
     alphaDissolve.mask = 0;
 
-    dissolveDisp = offDisp1;
-    backDisp = offDisp2;
+    backDisp = offDisp1;
+    dissolveDisp = offDisp2;
 
-    dissolveDispRes = offDisp1Resource;
-    backDispRes = offDisp2Resource;
+    backDispRes = offDisp1Resource;
+    dissolveDispRes = offDisp2Resource;
 }
 
 pis_compositorErrors pis_compositeSlide(DISPMANX_DISPLAY_HANDLE_T dispRes, pis_slides_s *slide)
@@ -379,7 +489,8 @@ pis_compositorErrors pis_compositeSlide(DISPMANX_DISPLAY_HANDLE_T dispRes, pis_s
 				}else{
 					if(dataTxt->element == 0){
 						printf("Adding text element\n");
-						VC_RECT_T rectImg = {0,0,pis_compositor.screenWidth<<16,pis_compositor.screenHeight<<16};
+						VC_RECT_T rectImg = {0,0,
+								pis_compositor.screenWidth<<16,pis_compositor.screenHeight<<16};
 
 						dataTxt->element = vc_dispmanx_element_add(update,dispRes,layer++,
 								&screenRect,
@@ -417,15 +528,13 @@ pis_compositorErrors pis_initializeCompositor()
 {
 	bcm_host_init();
 
-	printFontList();
+//	printFontList();
 
 	pis_initDispmanx();
 
 	graphics_get_display_size(0,&pis_compositor.screenWidth,&pis_compositor.screenHeight);
 
-	//pis_compositor.slides = NULL;
-	//pis_compositor.currentSlide = NULL;
-	pis_compositor.state = 1;
+	pis_compositor.state = 3;
 
 	pis_compositor.slideHoldTime = 0;
 	pis_compositor.slideStartTime = 0;
@@ -435,10 +544,9 @@ pis_compositorErrors pis_initializeCompositor()
 
 	pis_slides_s *newSlide;
 
-
 	//--------------------------------
 
-	pis_addNewSlide(&newSlide, 1000,10000,"Slide 1");
+	pis_addNewSlide(&newSlide, 1000,3000,"Slide 1");
 
 	pis_compositor.slides = newSlide;
 
@@ -449,36 +557,72 @@ pis_compositorErrors pis_initializeCompositor()
 				1,1,pis_SIZE_SCALE);
 
 
-	pis_loadSlideResources(newSlide);
+	//--------------------------------
+
+	pis_addNewSlide(&newSlide, 1000,3000,"Slide 3");
+
+	pis_AddTextToSlide(newSlide,"Pictures!","",40.0/1080.0,.5,.95,0xFFFF0000);
+	pis_AddTextToSlide(newSlide,"Pictures!","",40.0/1080.0,.5,.25,0xFFFF0000);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.25,.5,
+					.25,.25,pis_SIZE_SCALE);
+
+	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.75,.5,
+				.25,.25,pis_SIZE_SCALE);
+
+	pis_compositor.currentSlide = NULL;
+	pis_compositor.lastSlide = NULL;
+	pis_compositor.nextSlide = pis_compositor.slides;
 
 	//--------------------------------
 
-	pis_addNewSlide(&newSlide, 1000,10000,"Slide 3");
+	pis_addNewSlide(&newSlide, 1000,3000,"Slide 3");
 
-	//pis_AddTextToSlide(newSlide,"Ollie!","",40.0/1080.0,.5,.95,0xFFFF0000);
+	pis_AddTextToSlide(newSlide,"Ollie!","",40.0/1080.0,.5,.95,0xFFFF0000);
 
 	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.5,.5,
 					1,1,pis_SIZE_SCALE);
 
-	pis_loadSlideResources(newSlide);
+	pis_compositor.currentSlide = NULL;
+	pis_compositor.lastSlide = NULL;
+	pis_compositor.nextSlide = pis_compositor.slides;
 
-	pis_compositor.currentSlide = pis_compositor.slides;
+	//Create a solid background for the two off screen windows
+	uint32_t *temp = malloc(pis_compositor.screenHeight*pis_compositor.screenWidth*4);
+	uint32_t x,y;
+	for(x = 0;x<pis_compositor.screenWidth;x++)
+		for(y = 0;y<pis_compositor.screenHeight;y++)
+			temp[x+y*pis_compositor.screenWidth] = 0xFF << 24;
 
+	uint32_t tempBlah1;
+	uint32_t back1Res = vc_dispmanx_resource_create(VC_IMAGE_ARGB8888,
+			pis_compositor.screenWidth,pis_compositor.screenHeight,&tempBlah1);
+
+	//TODO account for odd pitches to make dispmanx happy
+	vc_dispmanx_resource_write_data(back1Res,VC_IMAGE_ARGB8888,pis_compositor.screenWidth*4,temp,&screenRect);
+
+	free(temp);
 
 	update = vc_dispmanx_update_start(10);
 
-	pis_compositeSlide( display,  pis_compositor.slides);
+	//Add a black background to each offscreen buffer
+	vc_dispmanx_element_add(update,dissolveDisp, 2,&screenRect,back1Res,&srcRect,
+			DISPMANX_PROTECTION_NONE,&alpha,NULL,VC_IMAGE_ROT0);
+
+	vc_dispmanx_element_add(update,backDisp, 2,&screenRect,back1Res,&srcRect,
+				DISPMANX_PROTECTION_NONE,&alpha,NULL,VC_IMAGE_ROT0);
+
+	//Add the offscreen buffers to the main display
+	dispElement1 = vc_dispmanx_element_add(update,display,2000,&screenRect,backDispRes,&srcRect,
+			DISPMANX_PROTECTION_NONE,&alpha,NULL,VC_IMAGE_ROT0);
+
+	dispElement2 = vc_dispmanx_element_add(update,display,2001,&screenRect,dissolveDispRes,&srcRect,
+				DISPMANX_PROTECTION_NONE,&alphaDissolve,NULL,VC_IMAGE_ROT0);
+
+	backElement=dispElement1;
+	dissolveElement=dispElement2;
 
 	vc_dispmanx_update_submit_sync( update );
-
-	while(1){	update = vc_dispmanx_update_start(10);
-
-	pis_compositeSlide( display,  pis_compositor.slides);
-
-	vc_dispmanx_update_submit_sync( update );
-	sleep(1);
-	}
-
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
@@ -491,7 +635,7 @@ pis_compositorErrors pis_compositorcleanup()
 }
 
 
-
+int lastState;
 pis_compositorErrors pis_doCompositor()
 {
 	float opacity;
@@ -500,11 +644,11 @@ pis_compositorErrors pis_doCompositor()
 
 	update = vc_dispmanx_update_start(10);
 
-	if(pis_compositor.currentSlide != NULL){
-		pis_compositeSlide(display,pis_compositor.currentSlide);
-	}else{
-		vc_dispmanx_display_set_background(update, dissolveDisp,0,0,0);
+	if(pis_compositor.state != lastState)
+	{
+		printf("State: %d\n",pis_compositor.state);
 	}
+	lastState = pis_compositor.state;
 
 	switch(pis_compositor.state){
 
@@ -529,42 +673,87 @@ pis_compositorErrors pis_doCompositor()
 			dissolveDisp = backDisp;
 			backDisp = tempDisp;
 
+			tempElement = dissolveElement;
+			dissolveElement = backElement;
+			backElement = tempElement;
+
 			pis_compositor.slideStartTime = ms;
+
+			vc_dispmanx_element_change_attributes(update,
+					backElement,
+					1 , //To change: Layer
+					2000, //Layer
+					0, //Opacity
+					0, //Dest rect
+					0, //Src rect
+					0, //mask
+					DISPMANX_NO_ROTATE); //transform
+
+			vc_dispmanx_element_change_attributes(update,
+					dissolveElement,
+					1 , //to change: Layer
+					2001, //Layer
+					0, //Opacity
+					0, //Dest rect
+					0, //Src rect
+					0, //mask
+					DISPMANX_NO_ROTATE); //transform
+
+
+			opacity = 0;
 
 			pis_compositor.state = 2;
 			break;
 
-		case 2: opacity = 0; pis_compositor.state = 3; break;
+		case 2:
+			//At this point: "nextSlide" is sitting on the backImage and "currentSlide" is done
+			pis_compositor.lastSlide = pis_compositor.currentSlide;
+			pis_compositor.currentSlide = pis_compositor.nextSlide;
+
+			//Figure out what the next slide should be
+			if(pis_compositor.currentSlide != NULL && pis_compositor.currentSlide->next == NULL)
+			{
+				printf("Have a current slide but next is null, setting stack to head\n");
+				pis_compositor.nextSlide = pis_compositor.slides;
+			}else if(pis_compositor.currentSlide != NULL){
+				printf("Have a current slide with a next\n");
+				pis_compositor.nextSlide = pis_compositor.currentSlide->next;
+			}else {
+				printf("No current slide, next is NULL\n");
+				pis_compositor.nextSlide = NULL;
+			}
+			pis_compositor.state = 3;
+			break;
 
 		//Render the next slide to the dissolve layer
 		case 3:
-			//TODO: Handle NULL currentSlide
-			if(pis_compositor.currentSlide == NULL)
+
+			//clean up memory from the last slide if need be
+			if(pis_compositor.lastSlide != NULL && pis_compositor.lastSlide != pis_compositor.currentSlide)
 			{
+				printf("Clearing old slide\n");
+				pis_removeSlideFromDisplay(pis_compositor.lastSlide);
+				pis_freeSlideResource(pis_compositor.lastSlide);
+			}
+
+			//Get the next slide ready
+			//TODO: Handle NULL currentSlide
+			if(pis_compositor.nextSlide == NULL)
+			{
+				printf("Null next, fading out.\n");
 				//No current slide, fade to black
 				pis_compositor.slideDissolveTime = 1000;
 				pis_compositor.slideHoldTime = 1000;
 				pis_compositor.state = 4;
 				break;
 			}else{
-				pis_compositor.slideDissolveTime = pis_compositor.currentSlide->dissolve;
-				pis_compositor.slideHoldTime = pis_compositor.currentSlide->duration;
+				printf("Loading up the next slide.\n");
+				opacity = 0; //For initial conditions
+				pis_loadSlideResources(pis_compositor.nextSlide);
+				pis_compositeSlide(dissolveDisp,pis_compositor.nextSlide);
+				pis_compositor.slideDissolveTime = pis_compositor.nextSlide->dissolve;
+				pis_compositor.slideHoldTime = pis_compositor.nextSlide->duration;
 			}
-
-			if(pis_compositor.currentSlide != NULL && pis_compositor.currentSlide->next != NULL)
-			{
-				pis_compositor.currentSlide = pis_compositor.currentSlide->next;
-			}else{
-				pis_compositor.currentSlide = pis_compositor.slides;
-			}
-
-			/*
-			if(pis_compositor.currentSlide != NULL){
-				pis_compositeSlide(dissolveDisp,pis_compositor.currentSlide);
-			}else{
-				vc_dispmanx_display_set_background(update, dissolveDisp,0,0,0);
-				//pis_fillBuf(dissolveWindow,0xFF000000);
-			}*/
 
 			pis_compositor.state = 4;
 
@@ -579,14 +768,25 @@ pis_compositorErrors pis_doCompositor()
 			break;
 	}
 
-	vc_dispmanx_element_add(update,display,2000,&screenRect,backDispRes,&screenRect,
-			DISPMANX_PROTECTION_NONE,&alpha,NULL,VC_IMAGE_ROT0);
+	vc_dispmanx_element_change_attributes(update,
+			backElement,
+			2, //To change: Opacity
+			0, //Layer
+			255, //Opacity
+			0, //Dest rect
+			0, //Src rect
+			0, //mask
+			DISPMANX_NO_ROTATE); //transform
 
-	alphaDissolve.opacity = opacity*255;
-	alphaDissolve.opacity = 120;
-
-	vc_dispmanx_element_add(update,display,2001,&screenRect,dissolveDispRes,&screenRect,
-				DISPMANX_PROTECTION_NONE,&alphaDissolve,NULL,VC_IMAGE_ROT0);
+	vc_dispmanx_element_change_attributes(update,
+			dissolveElement,
+			2, //To change: Opacity
+			0, //Layer
+			opacity*255, //Opacity
+			0, //Dest rect
+			0, //Src rect
+			0, //mask
+			DISPMANX_NO_ROTATE); //transform
 
 	vc_dispmanx_update_submit_sync( update );
 

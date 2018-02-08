@@ -125,6 +125,12 @@ typedef struct pis_compositor_s
 
 	pis_slides_s *slides;
 
+	//for transistions, lastSlide resources are freed
+	//then nextSlide resources are loaded
+	pis_slides_s *lastSlide;
+	pis_slides_s *nextSlide;
+
+
 	pis_slides_s *currentSlide;
 
 	double dissolveStartTime;

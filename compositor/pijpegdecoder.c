@@ -237,10 +237,10 @@ portSettingsChanged(OPENMAX_JPEG_DECODER * decoder)
 {
     OMX_PARAM_PORTDEFINITIONTYPE portdef;
 
-    //Allocated the buffers and enables the port
+    //Allocates the buffers and enables the port
     int ret = ilclient_enable_port_buffers(decoder->imageDecoder->component, decoder->imageDecoder->outPort, NULL, NULL, NULL);
     if(ret != OMX_ErrorNone)
-    	printf("portSettingsChanged: Error %x enabling buffers.\n",ret);
+    	printf("portSettingsChanged: Error %d enabling buffers.\n",ret);
 
     // Get the image dimensions
     //TODO: Store color format too
@@ -384,29 +384,29 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 	ilclient_wait_for_event(decoder->imageDecoder->component,
 				OMX_EventCmdComplete,
 				OMX_CommandPortEnable, 0,
-				decoder->imageDecoder->inPort, 0,
+				decoder->imageDecoder->inPort, ILCLIENT_PORT_ENABLED,
 				0, TIMEOUT_MS);
     if (ret != 0) {
 		fprintf(stderr, "Did not get port enable %d\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
     }
 
-    // start executing the decoder
-    ret = OMX_SendCommand(decoder->imageDecoder->handle,
+	// start executing the decoder
+	ret = OMX_SendCommand(decoder->imageDecoder->handle,
 			  OMX_CommandStateSet, OMX_StateExecuting, NULL);
-    if (ret != 0) {
+	if (ret != 0) {
 		fprintf(stderr, "Error starting image decoder %x\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
-    }
+	}
 
-    ret = ilclient_wait_for_event(decoder->imageDecoder->component,
+	ret = ilclient_wait_for_event(decoder->imageDecoder->component,
 				  OMX_EventCmdComplete,
-				  OMX_CommandStateSet, 0, OMX_StateExecuting, 0, 0,
+				  OMX_CommandStateSet, 0, OMX_StateExecuting, 0, ILCLIENT_STATE_CHANGED,
 				  TIMEOUT_MS);
-    if (ret != 0) {
-    	fprintf(stderr, "Did not receive executing stat %d\n", ret);
+	if (ret != 0) {
+		fprintf(stderr, "Did not receive executing state %d\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
-    }
+	}
 
     return OMXJPEG_OK;
 }
@@ -508,7 +508,8 @@ decodeImage(OPENMAX_JPEG_DECODER * decoder, char *sourceImage,
 					ilclient_wait_for_event
 					(decoder->imageDecoder->component,
 					 OMX_EventPortSettingsChanged,
-					 decoder->imageDecoder->outPort, 0, 0, 1, ILCLIENT_EVENT_ERROR | ILCLIENT_PARAMETER_CHANGED, 5);
+					 decoder->imageDecoder->outPort, 0, 0, 1,
+					 ILCLIENT_EVENT_ERROR | ILCLIENT_PARAMETER_CHANGED, 5);
 
 				if (ret == 0) {
 					ret = portSettingsChanged(decoder);
@@ -523,6 +524,8 @@ decodeImage(OPENMAX_JPEG_DECODER * decoder, char *sourceImage,
 			}
     	}
 
+    	//Does weird things with the buffer
+    	//TODO: output directly to the image buffer
 		OMX_BUFFERHEADERTYPE *buff_header = ilclient_get_output_buffer(decoder->imageDecoder->component, decoder->imageDecoder->outPort, 0);
 		if(buff_header != NULL){
 			//TODO: find a better way to store this
@@ -562,7 +565,7 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
 		    NULL);
     int ret = ilclient_wait_for_event(decoder->imageDecoder->component,
 			    OMX_EventCmdComplete, OMX_CommandFlush, 0,
-			    decoder->imageDecoder->outPort, 0, 0,
+			    decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_FLUSH,
 			    TIMEOUT_MS);
     if(ret != 0)
     	printf("Error flushing decoder commands: %d\n", ret);
@@ -577,7 +580,6 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
     if(ret != 0)
     	printf("Error disabling image decoder input port: %d\n",ret);
 
-
     for(int i = 0;i<decoder->inputBufferCount;i++)
     	OMX_FreeBuffer(decoder->imageDecoder->handle,
     			decoder->imageDecoder->inPort, decoder->ppInputBufferHeader[i]);
@@ -586,7 +588,7 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
 
     ilclient_wait_for_event(decoder->imageDecoder->component,
 			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, decoder->imageDecoder->inPort, 0, 0,
+			    0, decoder->imageDecoder->inPort, 0, ILCLIENT_PORT_DISABLED,
 			    TIMEOUT_MS);
 
     ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandPortDisable,
@@ -595,13 +597,15 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
     	printf("1 Error disabling output port %d\n",ret);
     }
 
+    vcos_free(temp->pBuffer);
+
     OMX_FreeBuffer(decoder->imageDecoder->handle,
 		   decoder->imageDecoder->outPort,
 		   temp);
 
     ret =  ilclient_wait_for_event(decoder->imageDecoder->component,
 			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, decoder->imageDecoder->outPort, 0, 0,
+			    0, decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_DISABLED,
 			    TIMEOUT_MS);
     if(ret != 0) printf("2 Error disabling output port %d\n",ret);
 
@@ -609,7 +613,7 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
     //Once ports are disabled the component will go to idle
     ret = ilclient_wait_for_event(decoder->imageDecoder->component,
 			    OMX_EventCmdComplete, OMX_CommandStateSet, 0,
-			    OMX_StateIdle, 0, 0, TIMEOUT_MS);
+			    OMX_StateIdle, 0, ILCLIENT_STATE_CHANGED, TIMEOUT_MS);
 
     if(ret != OMX_ErrorNone)
     	printf("Error %d transitioning to idle.\n", ret);
@@ -618,6 +622,11 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
     //Change the components state to loaded. the ilclient will also wait to confirm the event
     ret = ilclient_change_component_state(decoder->imageDecoder->component,
 				    OMX_StateLoaded);
+
+    COMPONENT_T  *list[2];
+    list[0] = decoder->imageDecoder->component;
+    list[1] = (COMPONENT_T  *)NULL;
+    ilclient_cleanup_components(list);
 
     if(ret != 0)
     	printf("Transition to loaded failed\n");
@@ -628,9 +637,10 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
     	ilclient_destroy(decoder->client);
     }
 }
-
 sImage *decodeJpgImage(char *img)
 {
+	printf("JPEG Decoder\n");
+
     OPENMAX_JPEG_DECODER *pDecoder;
     char           *sourceImage;
     size_t          imageSize;

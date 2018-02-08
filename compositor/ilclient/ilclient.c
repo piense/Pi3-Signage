@@ -1117,6 +1117,7 @@ int ilclient_wait_for_event(COMPONENT_T *comp, OMX_EVENTTYPE event,
 
    while (ilclient_remove_event(comp, event, nData1, ignore1, nData2, ignore2) < 0)
    {
+
       // if we want to be notified of errors, check the list for an error now
       // before blocking, the event flag may have been cleared already.
       if(event_flag & ILCLIENT_EVENT_ERROR)
@@ -1371,6 +1372,7 @@ void ilclient_debug_output(char *format, ...)
 
    va_start(args, format);
    vcos_vlog_info(format, args);
+
    va_end(args);
 }
 
@@ -1834,4 +1836,3 @@ unsigned int ilclient_stack_size(void)
 {
    return ILCLIENT_THREAD_DEFAULT_STACK_SIZE;
 }
-

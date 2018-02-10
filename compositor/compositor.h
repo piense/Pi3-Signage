@@ -3,13 +3,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+extern "C"
+{
 //External Libs
 #include "bcm_host.h"
 #include "vgfont/vgfont.h"
-#include "piDisplayRender.h"
-
-pis_window *backWindow;
-pis_window *dissolveWindow;
+}
 
 #define PIS_COLOR_ARGB_BLACK 0xFF000000
 #define PIS_COLOR_ARGB_WHITE 0xFFFFFFFF
@@ -93,7 +92,7 @@ typedef struct pis_mediaAudio
 
 typedef struct pis_mediaElement_s
 {
-	char *name;
+	const char *name;
 	pis_mediaTypes mediaType;
 	void *data; //struct to match the mediaType
 	uint32_t z; //0 = bottom
@@ -140,11 +139,11 @@ typedef struct pis_compositor_s
 
 } pis_compositor_s;
 
-pis_compositor_s pis_compositor;
+extern pis_compositor_s pis_compositor;
 
 pis_compositorErrors pis_initializeCompositor();
 pis_compositorErrors pis_compositorcleanup();
 pis_compositorErrors pis_doCompositor(); //Might end up as a thread from init
 
-pis_compositorErrors pis_AddTextToSlide(pis_slides_s *slide, char* text, char* fontName, float height, float x, float y, uint32_t color);
+pis_compositorErrors pis_AddTextToSlide(pis_slides_s *slide, const char* text, const char* fontName, float height, float x, float y, uint32_t color);
 

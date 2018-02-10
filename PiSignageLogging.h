@@ -18,6 +18,6 @@
 extern int pis_loggingLevel;
 
 void pis_logMessage(int level, const char *fmt, ...);
-char *OMX_errString(int err);
+const char *OMX_errString(int err);
 void printOMXdebug();
 void printOMXPort(OMX_HANDLETYPE componentHandle, OMX_U32 portno);

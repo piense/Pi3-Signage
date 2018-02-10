@@ -1,7 +1,7 @@
 //System headers
 #include <time.h>
 #include <stdio.h>
-//#include <dirent.h>
+#include <dirent.h>
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -17,6 +17,8 @@
 #include "tricks.h"
 #include "textoverlay.h"
 #include "fontTest.h"
+#include "../graphicsTests.h"
+
 
 //TODO: put this in a struct and out of the global namespace
 DISPMANX_DISPLAY_HANDLE_T   display, offDisp1, offDisp2;
@@ -31,8 +33,6 @@ uint32_t                    vc_image_ptr;
 uint32_t					screen;
 VC_DISPMANX_ALPHA_T alpha, alphaDissolve;
 VC_RECT_T srcRect, screenRect;
-
-
 
 
 double linuxTimeInMs()
@@ -107,11 +107,17 @@ pis_compositorErrors pis_AddTextToSlide(pis_slides_s *slide, char* text, char* f
 	newMedia->mediaElement.mediaType = pis_MEDIA_TEXT;
 	pis_mediaText *data = ((pis_mediaText *)newMedia->mediaElement.data);
 
+	char *tempTxt = malloc(strlen(text)+1);
+	strcpy(tempTxt,text);
+	data->text = tempTxt;
+
+	tempTxt = malloc(strlen(fontName)+1);
+	strcpy(tempTxt,fontName);
+	data->fontName = tempTxt;
+
 	data->fontHeight = height;
 	data->x = x;
 	data->y = y;
-	data->fontName = fontName;
-	data->text = text;
 	data->color = color;
 	data->res = 0;
 	data->element = 0;
@@ -133,7 +139,10 @@ pis_compositorErrors pis_AddImageToSlide(pis_slides_s *slide, char* file,
 
 	//TODO range check x,y,width,height
 
-	data->filename = file;
+	char *lfile = malloc(strlen(file)+1);
+	strcpy(&lfile[0],&file[0]);
+
+	data->filename = lfile;
 	data->maxHeight = height;
 	data->maxWidth = width;
 	data->x = x;
@@ -224,8 +233,9 @@ void pis_freeSlideResource(pis_slides_s *slide)
 				data->cache.height =  0;
 				data->cache.stride = 0;
 
-				if(data->res != 0)
+				if(data->res != 0){
 					vc_dispmanx_resource_delete(data->res);
+				}
 
 				data->res = 0;
 				break;
@@ -243,7 +253,7 @@ void pis_freeSlideResource(pis_slides_s *slide)
 					printf("Deleting a resource in use, this will probably end poorly.\n");
 
 				if(dataTxt->res != 0)
-					vc_dispmanx_resource_delete(data->res);
+					vc_dispmanx_resource_delete(dataTxt->res);
 				dataTxt->res = 0;
 				break;
 
@@ -382,6 +392,8 @@ void pis_loadSlideResources(pis_slides_s *slide)
 
 void pis_initDispmanx()
 {
+	printGPUMemory();
+
     printf("Open display[%i]...\n", screen );
     display = vc_dispmanx_display_open( 0 );
 
@@ -417,7 +429,7 @@ void pis_initDispmanx()
     alpha.mask = 0;
 
     alphaDissolve.flags = DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_MIX;
-    alphaDissolve.opacity = 255; /*alpha 0->255*/
+    alphaDissolve.opacity = 0; /*alpha 0->255*/
     alphaDissolve.mask = 0;
 
     backDisp = offDisp1;
@@ -524,6 +536,48 @@ pis_compositorErrors pis_compositeSlide(DISPMANX_DISPLAY_HANDLE_T dispRes, pis_s
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
+pis_compositorErrors pis_loadDirectory(char* directory)
+{
+	DIR           *d;
+	struct dirent *dir;
+	d = opendir(directory);
+
+	if(d == NULL){
+		printf("Error opening images directory.\n");
+	}
+
+	pis_slides_s *newSlide;
+
+	char name[1000];
+	char fullpath[1000];
+	if (d)
+	{
+		while ((dir = readdir(d)) != NULL)
+		{
+			if(strstr(dir->d_name, ".jpg") != NULL ||strstr(dir->d_name, ".jpeg") != NULL ) {
+
+				sprintf(&name[0],"%s",dir->d_name);
+				sprintf(&fullpath[0],"%s/%s",directory,dir->d_name);
+
+				printf("\nAdding: %s %s\n",name,fullpath);
+
+				pis_addNewSlide(&newSlide, 1000,5000,"Image Slide");
+
+				pis_AddTextToSlide(newSlide,&name[0],"",50.0/1080.0,.5,.95,0xFF000000);
+
+				pis_AddImageToSlide(newSlide,&fullpath[0],
+						.5,.5, //position [0,1]
+						1,1 //size [0,1]
+						,pis_SIZE_SCALE);
+
+			}
+		}
+	closedir(d);
+	}
+
+	return 0;
+}
+
 pis_compositorErrors pis_initializeCompositor()
 {
 	bcm_host_init();
@@ -541,47 +595,7 @@ pis_compositorErrors pis_initializeCompositor()
 	pis_compositor.slideDissolveTime = 0;
 
 	//Demo slides
-
-	pis_slides_s *newSlide;
-
-	//--------------------------------
-
-	pis_addNewSlide(&newSlide, 1000,3000,"Slide 1");
-
-	pis_compositor.slides = newSlide;
-
-
-	pis_AddTextToSlide(newSlide,"Theodore David McVay","",40.0/1080.0,.5,.95,0xFFFF0000);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.5,.5,
-				1,1,pis_SIZE_SCALE);
-
-
-	//--------------------------------
-
-	pis_addNewSlide(&newSlide, 1000,3000,"Slide 3");
-
-	pis_AddTextToSlide(newSlide,"Pictures!","",40.0/1080.0,.5,.95,0xFFFF0000);
-	pis_AddTextToSlide(newSlide,"Pictures!","",40.0/1080.0,.5,.25,0xFFFF0000);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.25,.5,
-					.25,.25,pis_SIZE_SCALE);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/small.jpg",.75,.5,
-				.25,.25,pis_SIZE_SCALE);
-
-	pis_compositor.currentSlide = NULL;
-	pis_compositor.lastSlide = NULL;
-	pis_compositor.nextSlide = pis_compositor.slides;
-
-	//--------------------------------
-
-	pis_addNewSlide(&newSlide, 1000,3000,"Slide 3");
-
-	pis_AddTextToSlide(newSlide,"Ollie!","",40.0/1080.0,.5,.95,0xFFFF0000);
-
-	pis_AddImageToSlide(newSlide,"/mnt/data/images/IMG_6338.jpg",.5,.5,
-					1,1,pis_SIZE_SCALE);
+	pis_loadDirectory("/mnt/data/images");
 
 	pis_compositor.currentSlide = NULL;
 	pis_compositor.lastSlide = NULL;
@@ -634,21 +648,21 @@ pis_compositorErrors pis_compositorcleanup()
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
+double msLastPrint;
 
-int lastState;
 pis_compositorErrors pis_doCompositor()
 {
 	float opacity;
 
 	double ms = linuxTimeInMs();
 
-	update = vc_dispmanx_update_start(10);
-
-	if(pis_compositor.state != lastState)
+	if(ms - msLastPrint > 1000)
 	{
-		printf("State: %d\n",pis_compositor.state);
+		printCPUandGPUMemory();
+		msLastPrint = ms;
 	}
-	lastState = pis_compositor.state;
+
+	update = vc_dispmanx_update_start(10);
 
 	switch(pis_compositor.state){
 
@@ -722,6 +736,8 @@ pis_compositorErrors pis_doCompositor()
 				printf("No current slide, next is NULL\n");
 				pis_compositor.nextSlide = NULL;
 			}
+
+			//Now: currentSlide is on the back image, nextSlide needs to be dissolved up
 			pis_compositor.state = 3;
 			break;
 
@@ -734,6 +750,8 @@ pis_compositorErrors pis_doCompositor()
 				printf("Clearing old slide\n");
 				pis_removeSlideFromDisplay(pis_compositor.lastSlide);
 				pis_freeSlideResource(pis_compositor.lastSlide);
+			}else{
+				printf("No slide to clear.\n");
 			}
 
 			//Get the next slide ready
@@ -792,30 +810,3 @@ pis_compositorErrors pis_doCompositor()
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
-
-
-/*
-void loadImages(uint16_t width, uint16_t height)
-{
-	DIR           *d;
-	struct dirent *dir;
-	d = opendir("/mnt/data/images/");
-
-	if(d == NULL){
-		printf("Error opening images directory.\n");
-	}
-
-	char fullname[1000];
-	if (d)
-	{
-		while ((dir = readdir(d)) != NULL)
-		{
-			if(strstr(dir->d_name, ".jpg") != NULL || strstr(dir->d_name, ".bmp") != NULL || strstr(dir->d_name, ".jpeg") != NULL ) {
-				printf("\nAdding: %s\n",dir->d_name);
-				sprintf(&fullname[0],"%s%s","/mnt/data/images/",dir->d_name);
-				//addImageToList(&fullname[0],width,height);
-			}
-		}
-	closedir(d);
-	}
-}*/

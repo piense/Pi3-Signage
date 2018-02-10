@@ -4,6 +4,7 @@
 #include "piresizer.h"
 #include "pijpegdecoder.h"
 #include "tricks.h"
+#include "../PiSignageLogging.h"
 
 //I hate asserts
 #include <assert.h>
@@ -58,151 +59,118 @@ struct _OPENMAX_JPEG_DECODER {
     OMX_BUFFERHEADERTYPE **ppInputBufferHeader;
     uint16_t inputBufferCount;
     OMX_BUFFERHEADERTYPE *pOutputBufferHeader;
+
+    //Input Buffer stuff
+    uint8_t ibIndex; //Seems like the components won't accept more than 16 buffers
+    uint32_t ibToRead; //Bytes remaining in the input image to push through the decoder
+
+    //Output Buffer stuff
+    OMX_BUFFERHEADERTYPE *obHeader; //Stored in multiple places ATM but it works :/
+    uint8_t obGotEOS; // 0 = no
 };
 
-int             bufferIndex = 0;	// index to buffer array
-
-OMX_ERRORTYPE OMX_GetDebugInformation (OMX_OUT OMX_STRING debugInfo, OMX_INOUT OMX_S32 *pLen);
-
-#define DEBUG_LEN 4096
-OMX_STRING debug_info;
-void print_debug() {
-    int len = DEBUG_LEN;
-    if(debug_info == NULL)
-    	debug_info = malloc(DEBUG_LEN);
-    debug_info[0] = 0;
-    OMX_GetDebugInformation(debug_info, &len);
-    fprintf(stderr, debug_info);
-}
-
-void printPort(OMX_HANDLETYPE componentHandle, OMX_U32 portno){
-    OMX_PARAM_PORTDEFINITIONTYPE portdef;
-
-    portdef.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
-    portdef.nVersion.nVersion = OMX_VERSION;
-    portdef.nPortIndex = portno;
-    OMX_GetParameter(componentHandle,
-		     OMX_IndexParamPortDefinition, &portdef);
-
-    char domain[50];
-    switch(portdef.eDomain){
-    	case OMX_PortDomainAudio: strcpy(domain,"Audio"); break;
-    	case OMX_PortDomainVideo: strcpy(domain,"Video"); break;
-    	case OMX_PortDomainImage: strcpy(domain,"Image"); break;
-    	case OMX_PortDomainOther: strcpy(domain,"Other"); break;
-    	case OMX_PortDomainKhronosExtensions: strcpy(domain,"Khronos Extensions"); break;
-    	case OMX_PortDomainVendorStartUnused: strcpy(domain,"Vendor Start Unused"); break;
-    	case OMX_PortDomainMax: strcpy(domain,"Max"); break;
-    	default: strcpy(domain,"Unknown"); break;
-    }
-
-    printf("Port Info:\n\tOMX Version: %d\n\tPort Index: %d\n\tDirection: %s\n\tBuffer Count Actual: %d\n\tBuffer Count Min: %d\n\tBuffer Size: %d\n\tEnabled: %s\n\tPopulated: %s\n\tDomain: %s\n",
-    		portdef.nVersion.nVersion, portdef.nPortIndex, portdef.eDir == 0 ? "Input" : "Output", portdef.nBufferCountActual, portdef.nBufferCountMin, portdef.nBufferSize, portdef.bEnabled == 1 ? "Yes" : "No",
-    				portdef.bPopulated == 1 ? "Yes" : "No",domain);
-
-    //TODO: Detail other types of ports
-
-    if(portdef.eDomain == OMX_PortDomainImage){
-
-    	char coding[20];
-
-        switch(portdef.format.image.eCompressionFormat){
-        	case OMX_IMAGE_CodingUnused: strcpy(coding,"Unused"); break;
-        	case OMX_IMAGE_CodingAutoDetect: strcpy(coding,"Auto Detect"); break;
-        	case OMX_IMAGE_CodingJPEG: strcpy(coding,"JPEG"); break;
-        	case OMX_IMAGE_CodingJPEG2K: strcpy(coding,"JPEG2K"); break;
-        	case OMX_IMAGE_CodingEXIF: strcpy(coding,"EXIF"); break;
-        	case OMX_IMAGE_CodingTIFF: strcpy(coding,"TIFF"); break;
-        	case OMX_IMAGE_CodingGIF: strcpy(coding,"GIF"); break;
-        	case OMX_IMAGE_CodingPNG: strcpy(coding,"PNG"); break;
-        	case  OMX_IMAGE_CodingLZW: strcpy(coding,"LZW"); break;
-        	case OMX_IMAGE_CodingBMP: strcpy(coding,"BMP"); break;
-        	case OMX_IMAGE_CodingTGA: strcpy(coding,"TGA"); break;
-        	case OMX_IMAGE_CodingPPM: strcpy(coding,"PPM"); break;
-        	default: strcpy(coding,"???");
-        }
-
-    	printf("\tMIME Type: %s\n\tWidth: %d\n\tHeight: %d\n\tStride: %d\n\tSlice Height: %d\n\tFlag Error Concealment: %s\n\tCompression Format: %s\n\tColor Format: %d\n",
-    			portdef.format.image.cMIMEType,portdef.format.image.nFrameWidth,portdef.format.image.nFrameHeight,portdef.format.image.nStride,
-    			portdef.format.image.nSliceHeight,portdef.format.image.bFlagErrorConcealment == 1 ? "True" : "False", coding, portdef.format.image.eColorFormat );
-    }
-
-    if(portdef.eDomain == OMX_PortDomainVideo){
-
-    	char coding[20];
-
-
-        switch(portdef.format.image.eCompressionFormat){
-        	case OMX_VIDEO_CodingUnused: strcpy(coding,"Unused"); break;
-        	case OMX_VIDEO_CodingAutoDetect: strcpy(coding,"Auto Detect"); break;
-        	case OMX_VIDEO_CodingMPEG2: strcpy(coding,"MPEG2"); break;
-        	case OMX_VIDEO_CodingH263: strcpy(coding,"H.263"); break;
-        	case OMX_VIDEO_CodingMPEG4: strcpy(coding,"MPEG4"); break;
-        	case OMX_VIDEO_CodingWMV: strcpy(coding,"WMV"); break;
-        	case OMX_VIDEO_CodingRV: strcpy(coding,"RV"); break;
-        	default: strcpy(coding,"???");
-        }
-
-    	printf("\tBitrate: %d\n\tWidth: %d\n\tHeight: %d\n"
-    			"\tStride: %d\n\tSlice Height: %d\n\t"
-    			"Flag Error Concealment: %s\n\tCompression Format: %s\n\tColor Format: %d\n",
-    			portdef.format.video.nBitrate,portdef.format.video.nFrameWidth,portdef.format.video.nFrameHeight,
-				portdef.format.video.nStride,portdef.format.video.nSliceHeight,
-				portdef.format.video.bFlagErrorConcealment == 1 ? "True" : "False", coding, portdef.format.video.eColorFormat );
-    }
-
-}
+OPENMAX_JPEG_DECODER *pDecoder;
 
 void eos_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
 }
 
-void FillBufferDoneCallback(
+void EmptyBufferDoneCB(
+		void *data,
+		COMPONENT_T *comp)
+{
+	OPENMAX_JPEG_DECODER *decoder = (OPENMAX_JPEG_DECODER *) data;
+
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: EmptyBufferDoneCB()\n");
+	//Fire off the next buffer fill
+
+	if(decoder == NULL){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error EmptyBufferDoneCB no pDecoder\n");
+		//TODO abort the decoding process
+		return;
+	}
+
+	if(decoder->ibToRead > 0)
+	{
+		if(decoder->ibIndex >= decoder->inputBufferCount)
+		{
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error accessing input buffers\n");
+			return;
+		}else{
+			pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Using input buffer %d\n",decoder->ibIndex);
+		}
+
+		// get next buffer from array
+		OMX_BUFFERHEADERTYPE *pBufHeader =
+				decoder->ppInputBufferHeader[decoder->ibIndex];
+
+		// step index
+		decoder->ibIndex++;
+
+		decoder->ibToRead = decoder->ibToRead - pBufHeader->nFilledLen;
+
+		// update the buffer pointer and set the input flags
+
+		pBufHeader->nOffset = 0;
+		pBufHeader->nFlags = 0;
+		if (decoder->ibToRead <= 0) {
+			pBufHeader->nFlags = OMX_BUFFERFLAG_EOS;
+			pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Sending EOS on input buffer\n");
+		}
+
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Sending buffer %d to input port\n",decoder->ibIndex - 1);
+
+		// empty the current buffer
+		int             ret =
+			OMX_EmptyThisBuffer(decoder->imageDecoder->handle,
+					pBufHeader);
+
+		if (ret != OMX_ErrorNone) {
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error emptying input buffer %s\n",OMX_errString(ret));
+			//TODO abort decode process
+			return;
+		}
+	}else{
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: No more image data to send\n");
+	}
+}
+
+void FillBufferDoneCB(
   void* data,
   COMPONENT_T *comp)
 {
-}
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: FillBufferDoneCB()\n");
 
-char *err2str(int err) {
-    switch (err) {
-    case OMX_ErrorInsufficientResources: return "OMX_ErrorInsufficientResources";
-    case OMX_ErrorUndefined: return "OMX_ErrorUndefined";
-    case OMX_ErrorInvalidComponentName: return "OMX_ErrorInvalidComponentName";
-    case OMX_ErrorComponentNotFound: return "OMX_ErrorComponentNotFound";
-    case OMX_ErrorInvalidComponent: return "OMX_ErrorInvalidComponent";
-    case OMX_ErrorBadParameter: return "OMX_ErrorBadParameter";
-    case OMX_ErrorNotImplemented: return "OMX_ErrorNotImplemented";
-    case OMX_ErrorUnderflow: return "OMX_ErrorUnderflow";
-    case OMX_ErrorOverflow: return "OMX_ErrorOverflow";
-    case OMX_ErrorHardware: return "OMX_ErrorHardware";
-    case OMX_ErrorInvalidState: return "OMX_ErrorInvalidState";
-    case OMX_ErrorStreamCorrupt: return "OMX_ErrorStreamCorrupt";
-    case OMX_ErrorPortsNotCompatible: return "OMX_ErrorPortsNotCompatible";
-    case OMX_ErrorResourcesLost: return "OMX_ErrorResourcesLost";
-    case OMX_ErrorNoMore: return "OMX_ErrorNoMore";
-    case OMX_ErrorVersionMismatch: return "OMX_ErrorVersionMismatch";
-    case OMX_ErrorNotReady: return "OMX_ErrorNotReady";
-    case OMX_ErrorTimeout: return "OMX_ErrorTimeout";
-    case OMX_ErrorSameState: return "OMX_ErrorSameState";
-    case OMX_ErrorResourcesPreempted: return "OMX_ErrorResourcesPreempted";
-    case OMX_ErrorPortUnresponsiveDuringAllocation: return "OMX_ErrorPortUnresponsiveDuringAllocation";
-    case OMX_ErrorPortUnresponsiveDuringDeallocation: return "OMX_ErrorPortUnresponsiveDuringDeallocation";
-    case OMX_ErrorPortUnresponsiveDuringStop: return "OMX_ErrorPortUnresponsiveDuringStop";
-    case OMX_ErrorIncorrectStateTransition: return "OMX_ErrorIncorrectStateTransition";
-    case OMX_ErrorIncorrectStateOperation: return "OMX_ErrorIncorrectStateOperation";
-    case OMX_ErrorUnsupportedSetting: return "OMX_ErrorUnsupportedSetting";
-    case OMX_ErrorUnsupportedIndex: return "OMX_ErrorUnsupportedIndex";
-    case OMX_ErrorBadPortIndex: return "OMX_ErrorBadPortIndex";
-    case OMX_ErrorPortUnpopulated: return "OMX_ErrorPortUnpopulated";
-    case OMX_ErrorComponentSuspended: return "OMX_ErrorComponentSuspended";
-    case OMX_ErrorDynamicResourcesUnavailable: return "OMX_ErrorDynamicResourcesUnavailable";
-    case OMX_ErrorMbErrorsInFrame: return "OMX_ErrorMbErrorsInFrame";
-    case OMX_ErrorFormatNotDetected: return "OMX_ErrorFormatNotDetected";
-    case OMX_ErrorContentPipeOpenFailed: return "OMX_ErrorContentPipeOpenFailed";
-    case OMX_ErrorContentPipeCreationFailed: return "OMX_ErrorContentPipeCreationFailed";
-    case OMX_ErrorSeperateTablesUsed: return "OMX_ErrorSeperateTablesUsed";
-    case OMX_ErrorTunnelingUnsupported: return "OMX_ErrorTunnelingUnsupported";
-    default: return "unknown error";
-    }
+	OPENMAX_JPEG_DECODER *decoder = (OPENMAX_JPEG_DECODER *) data;
+
+	//TODO: output directly to the image buffer
+	if(decoder->obHeader != NULL){
+		pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Processing received buffer\n");
+
+		if(decoder->obHeader->nFilledLen + pis_jpegdecoder.decodedAt > decoder->obHeader->nAllocLen){
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: ERROR overrun of decoded image buffer\n %d %d %d\n",decoder->obHeader->nFilledLen, pis_jpegdecoder.decodedAt, decoder->obHeader->nAllocLen);
+		}else
+			//Copy output port buffer to output image buffer
+			memcpy(&pis_jpegdecoder.imgBuf[pis_jpegdecoder.decodedAt],
+	    		decoder->obHeader->pBuffer + decoder->obHeader->nOffset,decoder->obHeader->nFilledLen);
+
+	    pis_jpegdecoder.decodedAt += decoder->obHeader->nFilledLen;
+
+	    //See if we've reached the end of the stream
+	    if (decoder->obHeader->nFlags & OMX_BUFFERFLAG_EOS) {
+	    	pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Output buffer EOS received\n");
+	    	decoder->obGotEOS = 1;
+	    }else{
+	    	pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Output buffer asking for more data\n");
+			int ret = OMX_FillThisBuffer(decoder->imageDecoder->handle,
+					decoder->obHeader);
+			if (ret != OMX_ErrorNone) {
+				pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error in FillThisBuffer: %s",OMX_errString(ret));
+				return;
+			}
+	    }
+	}else{
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error: No obHeader\n");
+	}
 }
 
 
@@ -227,7 +195,8 @@ void printState(OMX_HANDLETYPE handle) {
 }
 
 void error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
-    printf("OMX error %s\n", err2str(data));
+	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: OMX error %s\n",OMX_errString(data));
+	//TODO Global error flag to abort the process
 }
 
 //Called from decodeImage once the decoder has read the file header and
@@ -235,12 +204,18 @@ void error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
 int
 portSettingsChanged(OPENMAX_JPEG_DECODER * decoder)
 {
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: portSettingsChanged()\n");
+
     OMX_PARAM_PORTDEFINITIONTYPE portdef;
 
     //Allocates the buffers and enables the port
     int ret = ilclient_enable_port_buffers(decoder->imageDecoder->component, decoder->imageDecoder->outPort, NULL, NULL, NULL);
     if(ret != OMX_ErrorNone)
-    	printf("portSettingsChanged: Error %d enabling buffers.\n",ret);
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: error allocating output port buffer: %d\n",ret);
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output port buffers allocated\n");
+
+    decoder->obHeader = ilclient_get_output_buffer(decoder->imageDecoder->component, decoder->imageDecoder->outPort, 0);
 
     // Get the image dimensions
     //TODO: Store color format too
@@ -260,10 +235,13 @@ portSettingsChanged(OPENMAX_JPEG_DECODER * decoder)
     pis_jpegdecoder.imgBuf = malloc(portdef.nBufferSize);
     if(pis_jpegdecoder.imgBuf == NULL)
     {
-    	printf("jpegdecoder: Failed to allocate imgBuf\n");
-    	//TODO error
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error allocating output image buffer.\n");
+    	//TODO return error
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Allocated output image buffer\n");
     }
 
+    //Ehhh, not sure you ever really want to see this. Maybe LOGLEVEL_ALL_KITCHEN_SINK(?)
     //printPort(decoder->imageDecoder->handle,decoder->imageDecoder->outPort);
 
     return OMXJPEG_OK;
@@ -272,28 +250,34 @@ portSettingsChanged(OPENMAX_JPEG_DECODER * decoder)
 int
 prepareImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 {
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER, "JPEG Decoder: prepareImageDecoder()\n");
+
     decoder->imageDecoder = malloc(sizeof(COMPONENT_DETAILS));
     if (decoder->imageDecoder == NULL) {
 		perror("malloc image decoder");
 		return OMXJPEG_ERROR_MEMORY;
     }
 
-    int             ret = ilclient_create_component(decoder->client,
-						    &decoder->
-						    imageDecoder->
-						    component,
-						    "image_decode",
-						    ILCLIENT_DISABLE_ALL_PORTS
-						    |
-						    ILCLIENT_ENABLE_INPUT_BUFFERS
-						    |
-						    ILCLIENT_ENABLE_OUTPUT_BUFFERS //When not using tunneling (maybe)
-    						);
+    int ret = ilclient_create_component(decoder->client,
+		&decoder->
+		imageDecoder->
+		component,
+		"image_decode",
+		ILCLIENT_DISABLE_ALL_PORTS
+		|
+		ILCLIENT_ENABLE_INPUT_BUFFERS
+		|
+		ILCLIENT_ENABLE_OUTPUT_BUFFERS //When not using tunneling (maybe)
+		);
 
     if (ret != 0) {
-		perror("image decode");
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error creating component: %d\n",ret);
 		return OMXJPEG_ERROR_CREATING_COMP;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Created the component.\n");
     }
+
+
     // grab the handle for later use in OMX calls directly
     decoder->imageDecoder->handle =
 	ILC_GET_HANDLE(decoder->imageDecoder->component);
@@ -308,6 +292,7 @@ prepareImageDecoder(OPENMAX_JPEG_DECODER * decoder)
     if (port.nPorts != 2) {
     	return OMXJPEG_ERROR_WRONG_NO_PORTS;
     }
+
     decoder->imageDecoder->inPort = port.nStartPortNumber;
     decoder->imageDecoder->outPort = port.nStartPortNumber + 1;
 
@@ -317,11 +302,14 @@ prepareImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 int
 startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 {
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: startupImageDecoder()\n");
+
     // move to idle
     if(ilclient_change_component_state(decoder->imageDecoder->component,
 				    OMX_StateIdle) != 0)
     	printf("startupImageDecoder: Failed to transition to idle.\n");
 
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Setting port image format\n");
     // set input image format
     OMX_IMAGE_PARAM_PORTFORMATTYPE imagePortFormat;
     memset(&imagePortFormat, 0, sizeof(OMX_IMAGE_PARAM_PORTFORMATTYPE));
@@ -347,10 +335,11 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
     //First buffer has to be short, probably for it to read
     //the file header, rest of the file is in the second buffer
     //Tried smaller chunks, doesn't seem to like more than 16 input buffers??
+    //TODO Only works for 2 or 3 buffers, not a clue why.
+    decoder->inputBufferCount = 3;
+    portdef.nBufferCountActual = 3;
 
-    decoder->inputBufferCount = 2;
-    portdef.nBufferCountActual = 2;
-
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Setting port parameters\n");
     OMX_SetParameter(decoder->imageDecoder->handle,
     		OMX_IndexParamPortDefinition, &portdef);
 
@@ -359,11 +348,16 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 		    OMX_CommandPortEnable,
 		    decoder->imageDecoder->inPort, NULL);
 
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Initializing input buffers\n");
     decoder->ppInputBufferHeader = malloc(sizeof(void)*decoder->inputBufferCount);
     uint32_t thisBufsize;
     for(int i = 0; i < decoder->inputBufferCount; i++){
+
+    	//If this is the last buffer make sure it all fits
     	thisBufsize = i == decoder->inputBufferCount-1 ?
 				   pis_jpegdecoder.srcSize - i*bufSize : bufSize;
+
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Allocating buffer of %d\n",thisBufsize);
 
         int ret = OMX_UseBuffer(decoder->imageDecoder->handle,
     					   &decoder->ppInputBufferHeader[i],
@@ -378,6 +372,7 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
     	decoder->ppInputBufferHeader[i]->nFilledLen = thisBufsize;
     }
 
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Enabling input port\n");
     // wait for port enable to complete - which it should once buffers are
     // assigned
     int ret =
@@ -387,16 +382,21 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 				decoder->imageDecoder->inPort, ILCLIENT_PORT_ENABLED,
 				0, TIMEOUT_MS);
     if (ret != 0) {
-		fprintf(stderr, "Did not get port enable %d\n", ret);
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Input port enabled failed: %d\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Input port enabled.\n");
     }
 
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Starting image decoder ...\n");
 	// start executing the decoder
 	ret = OMX_SendCommand(decoder->imageDecoder->handle,
 			  OMX_CommandStateSet, OMX_StateExecuting, NULL);
 	if (ret != 0) {
-		fprintf(stderr, "Error starting image decoder %x\n", ret);
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed starting image decoder: %x\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
+	}else{
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Executing started.\n");
 	}
 
 	ret = ilclient_wait_for_event(decoder->imageDecoder->component,
@@ -404,8 +404,10 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 				  OMX_CommandStateSet, 0, OMX_StateExecuting, 0, ILCLIENT_STATE_CHANGED,
 				  TIMEOUT_MS);
 	if (ret != 0) {
-		fprintf(stderr, "Did not receive executing state %d\n", ret);
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Did not receive executing state %d\n", ret);
 		return OMXJPEG_ERROR_EXECUTING;
+	}else{
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Confirmed executing\n");
 	}
 
     return OMXJPEG_OK;
@@ -415,6 +417,8 @@ startupImageDecoder(OPENMAX_JPEG_DECODER * decoder)
 int
 setupOpenMaxJpegDecoder(OPENMAX_JPEG_DECODER ** pDecoder)
 {
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: setupOpenMaxJpegDecoder()\n");
+
     *pDecoder = malloc(sizeof(OPENMAX_JPEG_DECODER));
     if (pDecoder[0] == NULL) {
 		perror("malloc decoder");
@@ -423,8 +427,10 @@ setupOpenMaxJpegDecoder(OPENMAX_JPEG_DECODER ** pDecoder)
     memset(*pDecoder, 0, sizeof(OPENMAX_JPEG_DECODER));
 
     if ((pDecoder[0]->client = ilclient_init()) == NULL) {
-		perror("ilclient_init");
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to init ilclient\n");
 		return OMXJPEG_ERROR_ILCLIENT_INIT;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: ilclient loaded.\n");
     }
 
     ilclient_set_error_callback(pDecoder[0]->client,
@@ -434,8 +440,9 @@ setupOpenMaxJpegDecoder(OPENMAX_JPEG_DECODER ** pDecoder)
  			     eos_callback,
  			     NULL);
     ilclient_set_fill_buffer_done_callback(pDecoder[0]->client,
-    			FillBufferDoneCallback,
-    			NULL);
+    		FillBufferDoneCB, *pDecoder);
+    ilclient_set_empty_buffer_done_callback(pDecoder[0]->client,
+    		EmptyBufferDoneCB, *pDecoder);
 
     if (OMX_Init() != OMX_ErrorNone) {
 		ilclient_destroy(pDecoder[0]->client);
@@ -455,101 +462,46 @@ setupOpenMaxJpegDecoder(OPENMAX_JPEG_DECODER ** pDecoder)
     return OMXJPEG_OK;
 }
 
-OMX_BUFFERHEADERTYPE *temp;
-
 // this function passed the jpeg image buffer in, and returns the decoded
 // image
 int
 decodeImage(OPENMAX_JPEG_DECODER * decoder, char *sourceImage,
 	    size_t imageSize)
 {
+    decoder->ibToRead += imageSize;
+    decoder->ibIndex = 0;
+    decoder->obHeader = NULL;
+    decoder->obGotEOS = 0;
 
-    size_t          toread = 0;	// bytes left to read from buffer
-    toread += imageSize;
-    int gotEos = 0;
-    bufferIndex = 0;
+    int ret;
+    int outputPortConfigured = 0;
 
-    while (toread > 0 || gotEos == 0) {
-    	//TODO: figure out better structure for this
-    	if(toread > 0)
-    	{
-			// get next buffer from array
-			OMX_BUFFERHEADERTYPE *pBufHeader =
-				decoder->ppInputBufferHeader[bufferIndex];
+    EmptyBufferDoneCB(decoder,NULL);
 
-			// step index
-			bufferIndex++;
+    //TODO Should use proper semaphores here
+    //TODO: handle case when we never get EOS
+    //TODO: handle global abort flag if OMX or ilclient throws something
+    while (decoder->ibToRead > 0 || decoder->obGotEOS == 0) {
+		if(!outputPortConfigured)
+		{
+			ret =
+				ilclient_wait_for_event
+				(decoder->imageDecoder->component,
+				 OMX_EventPortSettingsChanged,
+				 decoder->imageDecoder->outPort, 0, 0, 1,
+				 0, 0);
 
-			toread = toread - pBufHeader->nFilledLen;
-
-			// update the buffer pointer and set the input flags
-
-			pBufHeader->nOffset = 0;
-			pBufHeader->nFlags = 0;
-			if (toread <= 0) {
-				pBufHeader->nFlags = OMX_BUFFERFLAG_EOS;
-			}
-
-			// empty the current buffer
-			int             ret =
-				OMX_EmptyThisBuffer(decoder->imageDecoder->handle,
-						pBufHeader);
-
-			if (ret != OMX_ErrorNone) {
-				perror("Empty input buffer");
-				fprintf(stderr, "return code %x\n", ret);
-				return OMXJPEG_ERROR_MEMORY;
-			}
-
-			// wait for input buffer to empty or port changed event
-			int             done = 0;
-			while (done == 0) {
-				ret =
-					ilclient_wait_for_event
-					(decoder->imageDecoder->component,
-					 OMX_EventPortSettingsChanged,
-					 decoder->imageDecoder->outPort, 0, 0, 1,
-					 ILCLIENT_EVENT_ERROR | ILCLIENT_PARAMETER_CHANGED, 5);
-
-				if (ret == 0) {
-					ret = portSettingsChanged(decoder);
-					if (ret != OMXJPEG_OK)
-					return ret;
-				}
-
-				// check to see if buffer is now empty
-				if (pBufHeader->nFilledLen == 0){
-					done = 1;
-				}
-			}
-    	}
-
-    	//Does weird things with the buffer
-    	//TODO: output directly to the image buffer
-		OMX_BUFFERHEADERTYPE *buff_header = ilclient_get_output_buffer(decoder->imageDecoder->component, decoder->imageDecoder->outPort, 0);
-		if(buff_header != NULL){
-			//TODO: find a better way to store this
-			temp=buff_header;
-
-			//Copy output port buffer to output image buffer
-		    memcpy(&pis_jpegdecoder.imgBuf[pis_jpegdecoder.decodedAt],buff_header->pBuffer + buff_header->nOffset,buff_header->nFilledLen);
-		    pis_jpegdecoder.decodedAt += buff_header->nFilledLen;
-
-		    //See if we've reached the end of the stream
-		    //TODO: handle case when we never get EOS
-		    if (buff_header->nFlags & OMX_BUFFERFLAG_EOS) {
-		    	gotEos = 1;
-		    }else{
+			if (ret == 0) {
+				ret = portSettingsChanged(decoder);
+				outputPortConfigured = 1;
 				int ret = OMX_FillThisBuffer(decoder->imageDecoder->handle,
-						buff_header);
+						decoder->obHeader);
 				if (ret != OMX_ErrorNone) {
-					perror("Filling output buffer");
-					fprintf(stderr, "Error code %x\n", ret);
-					return OMXJPEG_ERROR_MEMORY;
+					pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error in FillThisBuffer: %s",OMX_errString(ret));
+					return OMX_ErrorUndefined;
 				}
-		    }
+			}
 		}
-
     }
 
     return OMXJPEG_OK;
@@ -559,56 +511,49 @@ decodeImage(OPENMAX_JPEG_DECODER * decoder, char *sourceImage,
 void
 cleanup(OPENMAX_JPEG_DECODER * decoder)
 {
-    // flush everything through
-    OMX_SendCommand(decoder->imageDecoder->handle,
-		    OMX_CommandFlush, decoder->imageDecoder->outPort,
-		    NULL);
-    int ret = ilclient_wait_for_event(decoder->imageDecoder->component,
-			    OMX_EventCmdComplete, OMX_CommandFlush, 0,
-			    decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_FLUSH,
-			    TIMEOUT_MS);
-    if(ret != 0)
-    	printf("Error flushing decoder commands: %d\n", ret);
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: cleanup()\n");
+
+	int ret;
+
+	if(decoder == NULL){
+		pis_logMessage(PIS_LOGLEVEL_ALL, "JPEG Decoder: No decoder structure\n");
+		return;
+	}
+
+	if(decoder->imageDecoder == NULL){
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: No imageDecoder\n");
+		return;
+	}
+
+	if(decoder->imageDecoder->handle == NULL)
+	{
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: No imageDecoder->handle\n");
+		return;
+	}
+
+	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Continuing cleanup\n");
+
+	// flush everything through
+	ret = OMX_SendCommand(decoder->imageDecoder->handle,
+			OMX_CommandFlush, decoder->imageDecoder->outPort,
+			NULL);
+	if(ret != OMX_ErrorNone)
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error flushing decoder commands: %s\n", OMX_errString(ret));
+	ret = ilclient_wait_for_event(decoder->imageDecoder->component,
+				OMX_EventCmdComplete, OMX_CommandFlush, 0,
+				decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_FLUSH,
+				TIMEOUT_MS);
+	if(ret != 0)
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error flushing decoder commands: %d\n", ret);
+	else
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Decoder commands flushed\n");
+
 
     ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandStateSet, OMX_StateIdle, NULL);
-    if(ret != OMX_ErrorNone){
-    	printf("Error transitioning to idle: %d\n",ret);
-    }
-
-    ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandPortDisable,
-		    decoder->imageDecoder->inPort, NULL);
-    if(ret != 0)
-    	printf("Error disabling image decoder input port: %d\n",ret);
-
-    for(int i = 0;i<decoder->inputBufferCount;i++)
-    	OMX_FreeBuffer(decoder->imageDecoder->handle,
-    			decoder->imageDecoder->inPort, decoder->ppInputBufferHeader[i]);
-
-    free(decoder->ppInputBufferHeader);
-
-    ilclient_wait_for_event(decoder->imageDecoder->component,
-			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, decoder->imageDecoder->inPort, 0, ILCLIENT_PORT_DISABLED,
-			    TIMEOUT_MS);
-
-    ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandPortDisable,
-		    decoder->imageDecoder->outPort, NULL);
-    if(ret != OMX_ErrorNone){
-    	printf("1 Error disabling output port %d\n",ret);
-    }
-
-    vcos_free(temp->pBuffer);
-
-    OMX_FreeBuffer(decoder->imageDecoder->handle,
-		   decoder->imageDecoder->outPort,
-		   temp);
-
-    ret =  ilclient_wait_for_event(decoder->imageDecoder->component,
-			    OMX_EventCmdComplete, OMX_CommandPortDisable,
-			    0, decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_DISABLED,
-			    TIMEOUT_MS);
-    if(ret != 0) printf("2 Error disabling output port %d\n",ret);
-
+    if(ret != OMX_ErrorNone)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error transitioning to idle: %s\n", OMX_errString(ret));
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component transitioning to idle\n");
 
     //Once ports are disabled the component will go to idle
     ret = ilclient_wait_for_event(decoder->imageDecoder->component,
@@ -616,33 +561,100 @@ cleanup(OPENMAX_JPEG_DECODER * decoder)
 			    OMX_StateIdle, 0, ILCLIENT_STATE_CHANGED, TIMEOUT_MS);
 
     if(ret != OMX_ErrorNone)
-    	printf("Error %d transitioning to idle.\n", ret);
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Idle state: %d\n",ret);
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component transitioned to idle\n",ret);
+
+    ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandPortDisable,
+		    decoder->imageDecoder->inPort, NULL);
+    if(ret != 0)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error disabling image decoder input port: %s\n", OMX_errString(ret));
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Input port disabling\n");
+
+    for(int i = 0;i<decoder->inputBufferCount;i++){
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freeing buffer header %d\n",i);
+    	ret = OMX_FreeBuffer(decoder->imageDecoder->handle,
+    			decoder->imageDecoder->inPort, decoder->ppInputBufferHeader[i]);
+        if(ret != 0)
+        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error freeing input buffer %d: %s\n", i, OMX_errString(ret));
+        else
+        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freed input buffer %d\n", i);
+    }
+
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freed input buffers\n");
+
+    if(decoder->ppInputBufferHeader != NULL)
+    	free(decoder->ppInputBufferHeader);
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: No input buffer header to free.\n");
+
+    ret = ilclient_wait_for_event(decoder->imageDecoder->component,
+			    OMX_EventCmdComplete, OMX_CommandPortDisable,
+			    0, decoder->imageDecoder->inPort, 0, ILCLIENT_PORT_DISABLED,
+			    TIMEOUT_MS);
+    if(ret != 0)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error disabling input port %d\n", ret);
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Input port confirmed disabled\n");
+
+    ret = OMX_SendCommand(decoder->imageDecoder->handle, OMX_CommandPortDisable,
+		    decoder->imageDecoder->outPort, NULL);
+    if(ret != OMX_ErrorNone)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error disabling output port %s\n", OMX_errString(ret));
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Disabling output port\n");
+
+    if(decoder->obHeader != NULL && decoder->obHeader->pBuffer != NULL){
+    	vcos_free(decoder->obHeader->pBuffer);
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freed output pBuffer\n");
+    }else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error freeing temp->pBuffer\n");
+
+    ret = OMX_FreeBuffer(decoder->imageDecoder->handle,
+		   decoder->imageDecoder->outPort,
+		   decoder->obHeader);
+    if(ret != OMX_ErrorNone)
+        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error freeing output port buffer: %s\n", OMX_errString(ret));
+
+    ret =  ilclient_wait_for_event(decoder->imageDecoder->component,
+			    OMX_EventCmdComplete, OMX_CommandPortDisable,
+			    0, decoder->imageDecoder->outPort, 0, ILCLIENT_PORT_DISABLED,
+			    TIMEOUT_MS);
+    if(ret != 0) pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output port never disabled %d\n",ret);
+
+
+
 
 
     //Change the components state to loaded. the ilclient will also wait to confirm the event
     ret = ilclient_change_component_state(decoder->imageDecoder->component,
 				    OMX_StateLoaded);
+    if(ret != OMX_ErrorNone)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Idle state: %d\n",ret);
 
     COMPONENT_T  *list[2];
     list[0] = decoder->imageDecoder->component;
     list[1] = (COMPONENT_T  *)NULL;
     ilclient_cleanup_components(list);
 
-    if(ret != 0)
-    	printf("Transition to loaded failed\n");
-
-    OMX_Deinit();
+    ret = OMX_Deinit();
+    if(ret != OMX_ErrorNone)
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Idle state: %d\n",ret);
 
     if (decoder->client != NULL) {
     	ilclient_destroy(decoder->client);
     }
 }
+
 sImage *decodeJpgImage(char *img)
 {
-	printf("JPEG Decoder\n");
+	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: decodeJpgImage()\n");
 
-    OPENMAX_JPEG_DECODER *pDecoder;
-    char           *sourceImage;
+	pDecoder = NULL;
+
+
+    char           *sourceImage = NULL;
     size_t          imageSize;
     int             s;
 
@@ -650,19 +662,33 @@ sImage *decodeJpgImage(char *img)
 
     FILE           *fp = fopen(img, "rb");
     if (!fp) {
-	printf("File %s not found.\n", img);
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: File %s not found.\n", img);
+    	return NULL;
     }
+
+
     fseek(fp, 0L, SEEK_END);
     imageSize = ftell(fp);
     fseek(fp, 0L, SEEK_SET);
+
+
     sourceImage = malloc(imageSize);
+    if(sourceImage == NULL)
+    {
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to allocate buffer for sourceImage\n", img);
+    	goto error;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Allocated input image buffer.\n");
+    }
 
     assert(sourceImage != NULL);
     s = fread(sourceImage, 1, imageSize, fp);
 
     if(s != imageSize){
-    	printf("decodeJpgImage: File read error.\n");
-    	return NULL;
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to read image file into memory\n");
+    	goto error;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Image file read into memory.\n");
     }
 
     pis_jpegdecoder.srcSize = imageSize;
@@ -670,37 +696,64 @@ sImage *decodeJpgImage(char *img)
 
     fclose(fp);
     bcm_host_init();
+
     s = setupOpenMaxJpegDecoder(&pDecoder);
     if(s != 0){
-    	printf("decodeJpgImage: Error initializing decoder.\n");
-    	return NULL;
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to setup OpenMaxJpegDecoder.\n");
+    	goto error;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Set up decoder successful.\n");
     }
 
     s = decodeImage(pDecoder, sourceImage, imageSize);
 
     if(s != 0){
-    	printf("decodeJpgImage: Error decoding image.\n");
-    	return NULL;
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Decode image failed: %s.\n", OMX_errString(s));
+    	goto error;
+    }else{
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Image decoder succeeded, cleaning up.\n");
     }
+
 
     cleanup(pDecoder);
     free(pDecoder);
     free(sourceImage);
 
-    sImage *ret = malloc(sizeof(sImage));
-    if(ret == NULL){
-    	printf("jpegdecoder: Failed to malloc ret.\n");
-    }
+	sImage *ret = malloc(sizeof(sImage));
+	if(ret == NULL){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to allocate sImage ret structure.\n");
+		free(ret);
+		return NULL;
+	}
 
-    //TODO: get colorSpace from the port settings
-    ret->colorSpace = OMX_COLOR_FormatYUV420PackedPlanar;
-    ret->imageBuf = pis_jpegdecoder.imgBuf;
-    ret->imageSize = pis_jpegdecoder.decodedAt;
-    ret->imageWidth = pis_jpegdecoder.width;
-    ret->imageHeight = pis_jpegdecoder.height;
-    ret->stride = pis_jpegdecoder.stride;
-    ret->sliceHeight = pis_jpegdecoder.sliceHeight;
+	//TODO: get colorSpace from the port settings
+	ret->colorSpace = OMX_COLOR_FormatYUV420PackedPlanar;
+	ret->imageBuf = pis_jpegdecoder.imgBuf;
+	ret->imageSize = pis_jpegdecoder.decodedAt;
+	ret->imageWidth = pis_jpegdecoder.width;
+	ret->imageHeight = pis_jpegdecoder.height;
+	ret->stride = pis_jpegdecoder.stride;
+	ret->sliceHeight = pis_jpegdecoder.sliceHeight;
 
-    return ret;
+	pis_logMessage(PIS_LOGLEVEL_ALL, "JPEG Decoder: Returning successfully.\n");
+	return ret;
+
+    error:
+
+	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Exiting with error.\n");
+
+	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Cleaning up pDecoder\n");
+    cleanup(pDecoder);
+
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freeing pDecoder\n");
+    if(pDecoder != NULL)
+    	free(pDecoder);
+
+    pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freeing sourceImage\n");
+    if(sourceImage != NULL)
+    	free(sourceImage);
+
+    return NULL;
+
 }
 

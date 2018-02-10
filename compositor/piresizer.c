@@ -236,7 +236,7 @@ resizePortSettingsChanged(OPENMAX_RESIZER * decoder)
     portdef.format.image.nFrameWidth = pis_resizer.outputWidth;
     portdef.format.image.nFrameHeight = pis_resizer.outputHeight;
 	//portdef.format.image.nStride = pis_resizer.outputWidth*4;
-    portdef.format.image.nStride = ALIGN_UP(pis_resizer.outputWidth,32)*4;
+    portdef.format.image.nStride = ALIGN_UP(pis_resizer.outputWidth,16)*4;
 	portdef.format.image.nSliceHeight = 0;
 
     int ret = OMX_SetParameter(decoder->imageResizer->handle,

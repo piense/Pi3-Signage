@@ -12,7 +12,7 @@ OBJS+= compositor/vgfont/font.o compositor/vgfont/vgft.o compositor/vgfont/graph
 LIBS+= compositor/vgfont/libvgfont.a
 
 OBJS+=  compositor/fontTest.o compositor/compositor.o compositor/pijpegdecoder.o compositor/piresizer.o compositor/tricks.o compositor/textoverlay.o compositor/piDisplayRender.o
-OBJS += dispmanx.o
+OBJS += dispmanx.o graphicsTests.o PiSignageLogging.o
 
 BIN=hello_font.bin
 

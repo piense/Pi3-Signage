@@ -1,14 +1,14 @@
-BR_DIR = ../buildroot-2017.11.2
+BR_DIR = ../BR-Pi2
 CC=${BR_DIR}/output/host/usr/bin/arm-linux-cc
 CXX=${BR_DIR}/output/host/usr/bin/arm-linux-g++
 
 OBJS=main.o
 
-OBJS+= compositor/ilclient/ilclient.o compositor/ilclient/ilcore.o
+OBJS+= compositor/ilclient/ilclient.o compositor/ilclient/ilcore.o 
 LIB+= compositor/ilclient/libilclient.a
 
-OBJS+= compositor/vgfont/font.o compositor/vgfont/vgft.o compositor/vgfont/graphics.o
-LIBS+= compositor/vgfont/libvgfont.a
+OBJS+= compositor/vgfont/font.o compositor/vgfont/vgft.o compositor/vgfont/graphics.o compositor/tricks.o compositor/piSlideRenderer.o
+LIBS+= compositor/vgfont/libvgfont.a 
 
 OBJS+=  compositor/fontTest.o compositor/compositor.o compositor/pijpegdecoder.o compositor/piImageResizer.o
 OBJS += graphicsTests.o PiSignageLogging.o
@@ -21,7 +21,9 @@ LDFLAGS+= -lbrcmGLESv2 -lbrcmEGL -lopenmaxil -lbcm_host -lvcos -lvchiq_arm -lpth
 LDFLAGS+= -lrt -lm -lvcilcs -lvchostif -lfreetype -lcairo -lpangoft2-1.0 -lpangocairo-1.0 -lpango-1.0 -lglib-2.0 -lgobject-2.0
 
 INCLUDES+= -I./ -I${BR_DIR}/output/staging/usr/include/freetype2/
-INCLUDES+= -I${BR_DIR}/output/staging/usr/include/cairo -I${BR_DIR}/output/staging/usr/include/pango-1.0 -I${BR_DIR}/output/staging/usr/include/glib-2.0
+INCLUDES+= -I${BR_DIR}/output/staging/usr/include/freetype2/
+INCLUDES+= -I${BR_DIR}/output/staging/usr/include/cairo -I${BR_DIR}/output/staging/usr/include/pango-1.0
+INCLUDES+= -I${BR_DIR}/output/staging/usr/include/glib-2.0
 INCLUDES+= -I${BR_DIR}/output/staging/usr/lib/glib-2.0/include
 
 all: $(BIN) $(LIB)

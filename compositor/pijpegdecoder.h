@@ -77,4 +77,6 @@ private:
 	uint8_t colorSpace;
 	uint32_t stride;
 	uint32_t sliceHeight;
+
+	uint8_t omxError;
 };

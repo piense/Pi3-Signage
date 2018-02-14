@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "piSlideTypes.h"
 
 extern "C"
 {
@@ -10,134 +11,26 @@ extern "C"
 #include "vgfont/vgfont.h"
 }
 
-#define PIS_COLOR_ARGB_BLACK 0xFF000000
-#define PIS_COLOR_ARGB_WHITE 0xFFFFFFFF
-#define PIS_COLOR_ARGB_RED   0xFFFF0000
-#define PIS_COLOR_ARGB_GREEN 0xFF00FF00
-#define PIS_COLOR_ARGB_BLUE  0xFF0000FF
+#include "piSlideRenderer.h"
 
-//TODO: The compositor shouldn't be managing all the slides,
-//Need to separate that out and find a nice way to manage the image cache in RAM
 
-//ARGB 32 bit image buffer
-typedef struct pis_img
+struct pis_compositor_s
 {
-	uint32_t *img;
-	uint32_t width;
-	uint32_t height;
-	uint32_t stride;
-}pis_img;
-
-typedef enum pis_compositorErrors
-{
-	pis_COMPOSITOR_ERROR_NONE
-}pis_compositorErrors;
-
-typedef enum pis_mediaSizing
-{
-	pis_SIZE_CROP,
-	pis_SIZE_SCALE,
-	pis_SIZE_STRETCH
-} pis_mediaSizing;
-
-typedef enum pis_mediaTypes
-{
-	pis_MEDIA_IMAGE,
-	pis_MEDIA_VIDEO,
-	pis_MEDIA_TEXT,
-	pis_MEDIA_AUDIO
-} pis_mediaTypes;
-
-//x,y to center of item
-//width and height relative to frame size of 1x1
-
-//TODO: Storing media on a per-slide basis is less than efficient
-//Slides should point to a media library with cache that can be
-//preloaded and reused RAM permitting
-
-typedef struct pis_mediaImage
-{
-	float x, y, maxWidth, maxHeight;
-	char *filename;
-	pis_mediaSizing sizing;
-	pis_img cache;
-	DISPMANX_RESOURCE_HANDLE_T res;
-	DISPMANX_ELEMENT_HANDLE_T element;
-	uint32_t imgHandle;
-} pis_mediaImage;
-
-typedef struct pis_mediaVideo
-{
-	float x, y, maxWidth, maxHeight;
-	char *filename;
-	pis_mediaSizing sizing;
-	bool loop;
-} pis_mediaVideo;
-
-typedef struct pis_mediaText
-{
-	float x, y, fontHeight;
-	char *fontName;
-	char *text;
-	uint32_t color;
-	DISPMANX_RESOURCE_HANDLE_T res;
-	DISPMANX_ELEMENT_HANDLE_T element;
-	uint32_t imgHandle;
-}pis_mediaText;
-
-typedef struct pis_mediaAudio
-{
-
-}pis_mediaAudio;
-
-typedef struct pis_mediaElement_s
-{
-	const char *name;
-	pis_mediaTypes mediaType;
-	void *data; //struct to match the mediaType
-	uint32_t z; //0 = bottom
-	//
-} pis_mediaElement_s;
-
-typedef struct pis_mediaElementList_s
-{
-	pis_mediaElement_s mediaElement;
-	struct pis_mediaElementList_s *next;
-}pis_mediaElementList_s;
-
-//A set of presentation slides
-typedef struct pis_slides_s{
-	uint32_t duration; //millis
-	uint32_t dissolve; //millis for the fade into the slide
-//	bool loaded; //media content is ready in memory
-
-	pis_mediaElementList_s *mediaElementsHead;
-	struct pis_slides_s *next;
-
-} pis_slides_s;
-
-typedef struct pis_compositor_s
-{
-	uint8_t state;
 	uint32_t screenWidth, screenHeight;
-	GRAPHICS_RESOURCE_HANDLE backImg, dissolveImg;
 
 	pis_slides_s *slides;
 
-	//for transistions, lastSlide resources are freed
-	//then nextSlide resources are loaded
-	pis_slides_s *lastSlide;
 	pis_slides_s *nextSlide;
-
-
 	pis_slides_s *currentSlide;
+	uint8_t currentSlideRenderer;
+	uint8_t nextSlideRenderer;
 
-	double dissolveStartTime;
-	double slideStartTime;
-	uint32_t slideHoldTime;
-	uint32_t slideDissolveTime;
+	uint8_t numOfRenderers;
+	PiSlideRenderer *slideRenderers;
 
-} pis_compositor_s;
+	PlaybackState pbState;
+
+};
 
 extern pis_compositor_s pis_compositor;
 

@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+double linuxTimeInMs();
+
 typedef struct _sImage sImage;
 
 struct _sImage {

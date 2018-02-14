@@ -536,10 +536,16 @@ void PiImageResizer::cleanup()
 			    TIMEOUT_MS);
     if(ret != 0) pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Output port never disabled %d\n",ret);
 
-    //Change the components state to loaded. the ilclient will also wait to confirm the event
-    ret = ilclient_change_component_state(component,  OMX_StateLoaded);
+    ret = OMX_SendCommand(handle, OMX_CommandStateSet, OMX_StateLoaded, NULL);
+
     if(ret != OMX_ErrorNone)
-    	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Component did not enter Idle state: %d\n",ret);
+        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error moving to loaded state: %s\n", OMX_errString(ret));
+
+    ret =  ilclient_wait_for_event(component,
+			    OMX_EventCmdComplete, OMX_CommandStateSet,
+			    0, outPort, 0, ILCLIENT_STATE_CHANGED,
+			    TIMEOUT_MS);
+    if(ret != 0) pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: State never changed to loaded %d\n",ret);
 
     COMPONENT_T  *list[2];
     list[0] = component;

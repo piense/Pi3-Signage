@@ -23,21 +23,21 @@
 							<builder id="cdt.managedbuild.builder.gnu.cross.1421519358" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.1831751323" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
 								<option id="gnu.c.compiler.option.include.paths.1851713937" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/freetype2"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/pango-1.0"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/cairo"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/glib-2.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/freetype2"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/pango-1.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/glib-2.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/cairo"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1248903454" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.cpp.compiler.797923691" name="Cross G++ Compiler" superClass="cdt.managedbuild.tool.gnu.cross.cpp.compiler">
 								<option id="gnu.cpp.compiler.option.include.paths.331243726" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/freetype2"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/pango-1.0"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/cairo"/>
-									<listOptionValue builtIn="false" value="/home/david/Desktop/buildroot-2016.11/output/staging/usr/include/glib-2.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/pango-1.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/cairo"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/glib-2.0"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/freetype2"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.364381430" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

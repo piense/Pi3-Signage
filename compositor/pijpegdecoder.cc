@@ -31,11 +31,12 @@ void printChildNodes(uint32_t nodeID, OMX_HANDLETYPE handle)
 
 	OMX_CONFIG_METADATAITEMTYPE metadataItem;
 	OMX_CONFIG_CONTAINERNODEIDTYPE node;
-	for(int i = 0;i<containerCount.nNumNodes;i++){
+	for(uint32_t i = 0;i<containerCount.nNumNodes;i++){
 		node.nNodeIndex = i;
-		node.nParentNodeID = nodeID;
 		node.nSize = sizeof(OMX_CONFIG_CONTAINERNODEIDTYPE);
 		node.nVersion.nVersion = OMX_VERSION;
+		node.nParentNodeID = nodeID;
+
 		ret2 = OMX_GetConfig(handle,OMX_IndexConfigCounterNodeID,&node);
 
 	    if(ret2 != OMX_ErrorNone)
@@ -56,8 +57,6 @@ void printChildNodes(uint32_t nodeID, OMX_HANDLETYPE handle)
 		        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: meta5: %s\n", OMX_errString(ret2));
 
 			printf("Metadata value: %s=%s\n",metadataItem.nKey, metadataItem.nValue);
-
-
 	    }else{
 	    	printf("Printing children of: %d\n",node.nNodeID);
 	    	printChildNodes(node.nNodeID,handle);
@@ -94,6 +93,8 @@ PiImageDecoder::PiImageDecoder()
 	colorSpace = 0;
 	stride = 0;
 	sliceHeight = 0;
+
+	omxError = 0;
 }
 
 PiImageDecoder::~PiImageDecoder()
@@ -105,10 +106,17 @@ void PiImageDecoder::EmptyBufferDoneCB(
 		void *data,
 		COMPONENT_T *comp)
 {
+
 	PiImageDecoder *decoder = (PiImageDecoder *) data;
 
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: EmptyBufferDoneCB()\n");
 	//Fire off the next buffer fill
+
+	//Protect callbacks from race conditions with cleanup code
+	if(decoder->omxError != 0){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error detected, aborting EmptyBufferDoneCB\n");
+		return;
+	}
 
 	if(decoder == NULL){
 		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error EmptyBufferDoneCB no pDecoder\n");
@@ -169,6 +177,12 @@ void PiImageDecoder::FillBufferDoneCB(
 
 	PiImageDecoder *decoder = (PiImageDecoder *) data;
 
+	//Protect callbacks from race conditions with cleanup code
+	if(decoder->omxError != 0){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error detected, aborting Fill BufferDoneCB\n");
+		return;
+	}
+
 	//TODO: output directly to the image buffer
 	if(decoder->obHeader != NULL){
 		pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: More data put in the buffer\n");
@@ -210,6 +224,7 @@ void PiImageDecoder::FillBufferDoneCB(
 
 void PiImageDecoder::error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
 	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: OMX error %s\n",OMX_errString(data));
+	((PiImageDecoder*)userdata)->omxError = 1;
 }
 
 //Called from decodeImage once the decoder has read the file header and
@@ -217,6 +232,12 @@ void PiImageDecoder::error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 d
 int PiImageDecoder::portSettingsChanged()
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: portSettingsChanged()\n");
+
+	//Protect callbacks from race conditions with cleanup code
+	if(omxError != 0){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error detected, aborting portSettingsChanged\n");
+		return -1;
+	}
 
     OMX_PARAM_PORTDEFINITIONTYPE portdef;
 
@@ -280,6 +301,8 @@ int PiImageDecoder::portSettingsChanged()
 
     //Ehhh, not sure you ever really want to see this. Maybe LOGLEVEL_ALL_KITCHEN_SINK(?)
     //printPort(decoder->imageDecoder->handle,decoder->imageDecoder->outPort);
+
+    //printChildNodes(OMX_ALL, handle);
 
     return 0;
 }
@@ -448,7 +471,7 @@ int PiImageDecoder::setupOpenMaxJpegDecoder()
     	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: ilclient loaded.\n");
     }
 
-    ilclient_set_error_callback(client, error_callback, NULL);
+    ilclient_set_error_callback(client, error_callback, this);
     //ilclient_set_eos_callback(client, eos_callback, NULL);
     ilclient_set_fill_buffer_done_callback(
     		client, FillBufferDoneCB, this);
@@ -501,8 +524,7 @@ int PiImageDecoder::decodeImage()
 
     //TODO Should use proper semaphores here
     //TODO: handle case when we never get EOS (timeout?)
-    //TODO: handle global abort flag if OMX or ilclient throws something
-    while (ibToRead > 0 || obGotEOS == 0) {
+    while ((ibToRead > 0 || obGotEOS == 0) && omxError == 0) {
 
     	//TODO: See if this can get moved to a callback
 		if(!outputPortConfigured)
@@ -623,10 +645,17 @@ void PiImageDecoder::cleanup()
 			    TIMEOUT_MS);
     if(ret != 0) pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output port never disabled %d\n",ret);
 
-    //Change the components state to loaded. the ilclient will also wait to confirm the event
-    ret = ilclient_change_component_state(component,  OMX_StateLoaded);
+    ret = OMX_SendCommand(handle, OMX_CommandStateSet, OMX_StateLoaded, NULL);
+
     if(ret != OMX_ErrorNone)
-    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Idle state: %d\n",ret);
+        	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Error moving to loaded state: %s\n", OMX_errString(ret));
+
+    ret =  ilclient_wait_for_event(component,
+			    OMX_EventCmdComplete, OMX_CommandStateSet,
+			    0, outPort, 0, ILCLIENT_STATE_CHANGED,
+			    TIMEOUT_MS);
+    if(ret != 0) pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: State never changed to loaded %d\n",ret);
+
 
     COMPONENT_T  *list[2];
     list[0] = component;
@@ -635,24 +664,21 @@ void PiImageDecoder::cleanup()
 
     ret = OMX_Deinit();
     if(ret != OMX_ErrorNone)
-    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Idle state: %d\n",ret);
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Component did not enter Deinit(): %d\n",ret);
 
     if (client != NULL) {
     	ilclient_destroy(client);
     }
 }
 
-
-
 int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: decodeJpgImage()\n");
 
-	int ret2;
-
     uint32_t s;
 
     obDecodedAt = 0;
+    omxError = 0;
 
     FILE           *fp = fopen(img, "rb");
     if (!fp) {
@@ -695,8 +721,6 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
 
     s = decodeImage();
 
-
-
     if(s != 0){
     	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Decode image failed: %s.\n", OMX_errString(s));
     	goto error;
@@ -704,10 +728,14 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
     	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Image decoder succeeded, cleaning up.\n");
     }
 
-	printChildNodes(OMX_ALL, handle);
+    if(omxError != 0)
+    {
+    	goto error;
+    }
 
     cleanup();
     free(inputBuf);
+    inputBuf = NULL;
 
 	*ret = new sImage;
 	if(ret == NULL){
@@ -729,6 +757,12 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
 	return 0;
 
     error:
+
+	if(imgBuf != NULL)
+	{
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Cleaning up imgBuf\n");
+		free(imgBuf);
+	}
 
 	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Exiting with error.\n");
 

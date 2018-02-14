@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 	//resizerTest();
 	//dispmanXResourceTest();
 
-	pis_loggingLevel = PIS_LOGLEVEL_ALL;
+	//pis_loggingLevel = PIS_LOGLEVEL_ALL;
 
 	//TODO: Catch Ctrl+C for cleanup
 

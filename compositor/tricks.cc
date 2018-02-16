@@ -8,21 +8,20 @@
 uint32_t *packedYUV420toARGB(uint32_t srcWidth, uint32_t srcHeight, uint32_t srcStride, uint32_t sliceHeight, uint8_t *img)
 {
 	uint32_t *ret = new uint32_t[srcWidth*srcHeight];
-	float y, u, v;
+	float u, v;
 	uint32_t uStart = srcStride*sliceHeight;
 	uint32_t vStart = srcStride*sliceHeight*1.25;
 	float r,g,b, r1, g1, b1;
 	uint8_t r8, b8, g8;
 	uint32_t sliceOffset;
 	uint32_t y3;
-	uint16_t sliceNum;
 	float yc1, yc2, yc3, yc4, yc;
 
-	for(int y2 = 0;y2<srcHeight;y2+=2)
+	for(uint32_t y2 = 0;y2<srcHeight;y2+=2)
 	{
 		sliceOffset = y2/sliceHeight*sliceHeight*1.5*srcStride;
 		y3 = y2%sliceHeight;
-		for(int x = 0;x<srcWidth;x+=2)
+		for(uint32_t x = 0;x<srcWidth;x+=2)
 		{
 			yc1 = img[x+y3*srcStride + sliceOffset];
 			yc2 = img[x+y3*srcStride + 1 +sliceOffset];

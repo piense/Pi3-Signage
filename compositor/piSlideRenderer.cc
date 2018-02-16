@@ -76,9 +76,11 @@ PiSlideRenderer::PiSlideRenderer()
     uint32_t stride = ALIGN_UP(mainDisplayInfo.width,16);
     uint32_t *black = new uint32_t[stride*mainDisplayInfo.height];
 
-    for(int x = 0;x<mainDisplayInfo.width;x++)
-    	for(int y = 0;y<mainDisplayInfo.height;y++)
+    for(int x = 0;x<mainDisplayInfo.width;x++){
+    	for(int y = 0;y<mainDisplayInfo.height;y++){
     		black[x+y*stride] = 0xFF<<24;
+    	}
+    }
 
 	ret = vc_dispmanx_resource_write_data(blackRes,
 			VC_IMAGE_ARGB8888, stride*4,black,
@@ -594,9 +596,9 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 					if(dataImg->element == 0){
 						pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Adding image element\n");
 						VC_RECT_T rectImg = {0,0,(int32_t)dataImg->cache.width<<16,(int32_t)dataImg->cache.height << 16};
-						VC_RECT_T rectImg2 = {dataImg->x*mainDisplayInfo.width - dataImg->cache.width/2,
-								dataImg->y*mainDisplayInfo.height - dataImg->cache.height/2,
-								dataImg->cache.width,dataImg->cache.height};
+						VC_RECT_T rectImg2 = {(int32_t)(dataImg->x*mainDisplayInfo.width - dataImg->cache.width/2),
+								(int32_t)(dataImg->y*mainDisplayInfo.height - dataImg->cache.height/2),
+								(int32_t)dataImg->cache.width,(int32_t)dataImg->cache.height};
 						dataImg->element = vc_dispmanx_element_add(update,
 								offscreenDisplay,
 							layer++,

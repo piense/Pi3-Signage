@@ -25,3 +25,4 @@ General:
 -load slides from files
 -dynamic text
 -media management
+-Figure out how to exit cleanly. Seemed to get picky when multiple jpegs on one slide(?)

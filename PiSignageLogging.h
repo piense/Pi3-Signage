@@ -9,15 +9,21 @@
 //1 = Errors Only
 //2 = Nada
 
-#define PIS_LOGLEVEL_ALL -3
-#define PIS_LOGLEVEL_FUNCTION_HEADER -2
-#define PIS_LOGLEVEL_INFO -1
-#define PIS_LOGLEVEL_WARNING 0
-#define PIS_LOGLEVEL_ERROR 1
+enum PisLogLevels
+{
+	PIS_LOGLEVEL_UNUSED,
+	PIS_LOGLEVEL_ALL,
+	PIS_LOGLEVEL_FUNCTION_HEADER,
+	PIS_LOGLEVEL_INFO,
+	PIS_LOGLEVEL_WARN,
+	PIS_LOGLEVEL_ERROR
+};
 
-extern int pis_loggingLevel;
 
-void pis_logMessage(int level, const char *fmt, ...);
+
+extern PisLogLevels pis_loggingLevel;
+
+void pis_logMessage(PisLogLevels level, const char *fmt, ...);
 const char *OMX_errString(int err);
 void printOMXdebug();
 void printOMXPort(OMX_HANDLETYPE componentHandle, OMX_U32 portno);

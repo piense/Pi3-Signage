@@ -135,7 +135,7 @@ int PiImageResizer::portSettingsChanged()
 		     OMX_IndexParamPortDefinition, &portdef);
 
     if(ret != OMX_ErrorNone)
-        	printf("portSettingsChanged1: Error %x enabling buffers.\n",ret);
+        	pis_logMessage(PIS_LOGLEVEL_ERROR, "portSettingsChanged1: Error %x enabling buffers.\n",ret);
 
     OMX_GetParameter(handle,
 		     OMX_IndexParamPortDefinition, &portdef);
@@ -598,7 +598,7 @@ int PiImageResizer::ResizeImage(char *img,
 
 	float inRatio, outRatio;
 
-	printf("Resizing: %dx%d\n",width,height);
+	pis_logMessage(PIS_LOGLEVEL_INFO, "Resizing: %dx%d to %dx%d\n",width,height,maxOutputWidth, maxOutputHeight);
 
 	srcHeight = height;
 	srcWidth = width;
@@ -630,7 +630,7 @@ int PiImageResizer::ResizeImage(char *img,
 				cropWidth = ((float)height)*outRatio;
 				cropHeight = height;
 			}
-			printf("Cropping. Src: %dx%d. New: %dx%d at %d,%d\n", width, height,
+			pis_logMessage(PIS_LOGLEVEL_INFO,"Cropping. Src: %dx%d. New: %dx%d at %d,%d\n", width, height,
 					cropWidth, cropHeight, cropLeft, cropTop);
 			break;
 		case pis_SIZE_SCALE:
@@ -648,6 +648,8 @@ int PiImageResizer::ResizeImage(char *img,
 				outputWidth = maxOutputWidth;
 				outputHeight = ((float)maxOutputWidth)/inRatio;
 			}
+			pis_logMessage(PIS_LOGLEVEL_INFO,"Scaling: %dx%d -> %dx%d\n",
+					width, height, outputWidth,outputHeight);
 			break;
 		case pis_SIZE_STRETCH:
 			cropTop = 0;
@@ -656,11 +658,13 @@ int PiImageResizer::ResizeImage(char *img,
 			cropHeight = height;
 			outputHeight = maxOutputHeight;
 			outputWidth = maxOutputWidth;
+			pis_logMessage(PIS_LOGLEVEL_INFO,"Stretching: %dx%d -> %dx%d\n",
+					width, height, outputWidth,outputHeight);
 			break;
 	}
 
 	if(cropWidth <= 0 || cropHeight <= 0 || outputHeight <= 0 || outputWidth <= 0)
-		return NULL;
+		return -1;
 
 	imgBuf = (uint8_t *)img;
 	obDecodedAt = 0;
@@ -716,42 +720,6 @@ int PiImageResizer::ResizeImage(char *img,
     pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Freeing pDecoder\n");
     //Zero state(?)
 
-
     return 0;
-
-}
-
-//Just for debugging
-void PiImageResizer::printState()
-{
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: Component %d\n",component);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: handle %d\n",handle);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: inPort %d\n",inPort);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outPort %d\n",outPort);
-
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: client %d\n",client);
-
-    //Input stuff
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: imgBuf %d\n",imgBuf);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcWidth %d\n",srcWidth);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcHeight %d\n",srcHeight);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcSize %d\n",srcSize);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcStride %d\n",srcStride);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcSliceHeight %d\n",srcSliceHeight);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: ibBufferHeader %d\n",ibBufferHeader);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: srcColorSpace %d\n",srcColorSpace);
-
-    //Output Buffer stuff
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: obHeader %d\n",obHeader); //Stored in multiple places ATM but it works :/
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: obGotEOS %d\n",obGotEOS); // 0 = no
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: obDecodedAt %d\n",obDecodedAt);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputWidth %d\n",outputWidth);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputHeight %d\n",outputHeight);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputStride %d\n",outputStride);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputPic %d\n",outputPic);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputStride %d\n",outputStride);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputSliceHeight %d\n",outputSliceHeight);
-    pis_logMessage(PIS_LOGLEVEL_ALL, "Resizer: outputColorSpace %d\n",outputColorSpace);
-
 
 }

@@ -247,7 +247,7 @@ sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_me
 
     endMs = linuxTimeInMs();
 
-    printf("Resized image in %f seconds.\n",(endMs-startMs)/1000.0);
+    pis_logMessage(PIS_LOGLEVEL_INFO, "Resized image in %f seconds.\n",(endMs-startMs)/1000.0);
 	return ret3;
 
 	error:
@@ -295,7 +295,7 @@ void PiSlideRenderer::freeSlideResources()
 				dataImg = ((pis_mediaImage *)current->mediaElement.data);
 
 				if(dataImg->element != 0)
-					printf("Deleting a resource in use, this will probably end poorly.\n");
+					pis_logMessage(PIS_LOGLEVEL_WARN, "PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
 
 				if(dataImg->cache.img != NULL)
 					free(dataImg->cache.img);
@@ -321,7 +321,7 @@ void PiSlideRenderer::freeSlideResources()
 				dataTxt = ((pis_mediaText *)current->mediaElement.data);
 
 				if(dataTxt->element != 0)
-					printf("Deleting a resource in use, this will probably end poorly.\n");
+					pis_logMessage(PIS_LOGLEVEL_WARN,"PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
 
 				if(dataTxt->res != 0){
 					vc_dispmanx_resource_delete(dataTxt->res);
@@ -336,9 +336,7 @@ void PiSlideRenderer::freeSlideResources()
 	}
 
 	endTime = linuxTimeInMs();
-	printf("Freed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
-
-	printf("-----\n");
+	pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::freeSlideResources(): Freed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
 
 	state = SLIDE_STATE_IDLE;
 }
@@ -355,7 +353,12 @@ void PiSlideRenderer::loadSlideResources()
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::loadSlideResources()\n");
 	state = SLIDE_STATE_LOADING;
 
-	printf("Loading slide resources.\n");
+	if(slide == NULL){
+		pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer::loadSlideResources(): Error: no slide to load.\n");
+		return;
+	}
+
+	pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loading slide resources\n");
 	double startTime, endTime;
 	double startTime2 = linuxTimeInMs();
 	int ret;
@@ -422,7 +425,7 @@ void PiSlideRenderer::loadSlideResources()
 				}else{
 					pis_logMessage(PIS_LOGLEVEL_ALL,"loadSlideResources: Image resource != 0\n");
 				}
-				printf("Image: %f\n",linuxTimeInMs()-startTime);
+				pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Load Image: %f ms\n",linuxTimeInMs()-startTime);
 				break;
 
 			//TODO:
@@ -430,7 +433,7 @@ void PiSlideRenderer::loadSlideResources()
 				//TODO: range check width & height
 				startTime = linuxTimeInMs();
 
-				printf("Video: %f\n",linuxTimeInMs()-startTime);
+				pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Load Video: %f ms\n",linuxTimeInMs()-startTime);
 				break;
 
 			case pis_MEDIA_TEXT:
@@ -484,12 +487,12 @@ void PiSlideRenderer::loadSlideResources()
 							);
 
 					if(ret != 0)
-						printf("Error writing image data to dispmanx resource\n");
+						pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::loadSlideResources: Error writing image data to dispmanx resource\n");
 
 					free(temp);
 				}
 
-				printf("Text: %f\n",linuxTimeInMs()-startTime);
+				pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loaded Text: %f\n",linuxTimeInMs()-startTime);
 				break;
 
 			//TODO:
@@ -499,9 +502,8 @@ void PiSlideRenderer::loadSlideResources()
 	}
 
 	endTime = linuxTimeInMs();
-	printf("Loaded All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
+	pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loaded All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
 
-	printf("-----\n");
 
 	state = SLIDE_STATE_LOADED;
 }
@@ -577,8 +579,6 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 
 	startTime = linuxTimeInMs();
 
-	//printf("Compositing slide resources.\n");
-
 	int layer = 2000;
 
 	while(current != NULL){
@@ -589,10 +589,10 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 
 				if(dataImg->res == 0)
 				{
-					printf("Image not loaded\n");
+					pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Image not loaded\n");
 				}else{
 					if(dataImg->element == 0){
-						printf("Adding image element\n");
+						pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Adding image element\n");
 						VC_RECT_T rectImg = {0,0,(int32_t)dataImg->cache.width<<16,(int32_t)dataImg->cache.height << 16};
 						VC_RECT_T rectImg2 = {dataImg->x*mainDisplayInfo.width - dataImg->cache.width/2,
 								dataImg->y*mainDisplayInfo.height - dataImg->cache.height/2,
@@ -609,12 +609,12 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 							DISPMANX_NO_ROTATE
 							);
 						if(dataImg->element == 0)
-							printf("Unable to composite image.\n");
+							pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Unable to composite image.\n");
 					}else{
 						//Update element properties(?) for animation stuff
 					}
 				}
-				//printf("Image: %f\n",linuxTimeInMs()-startTime);
+				pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Image: %f\n",linuxTimeInMs()-startTime);
 				break;
 
 			//TODO:
@@ -627,10 +627,10 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 
 				if(dataTxt->res == 0)
 				{
-					printf("Text not loaded\n");
+					pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Text not loaded\n");
 				}else{
 					if(dataTxt->element == 0){
-						printf("Adding text element\n");
+						pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Adding text element\n");
 						VC_RECT_T rectImg = {0,0,
 								mainDisplayInfo.width<<16,mainDisplayInfo.height<<16};
 
@@ -645,12 +645,12 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 								DISPMANX_NO_ROTATE
 								);
 						if(dataTxt->element == 0)
-							printf("Error compositing text.\n");
+							pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error compositing text.\n");
 					}else{
 						//TODO: Update text data, possibly for movement or dynamic text
 					}
 				}
-				//printf("Text: %f\n",linuxTimeInMs()-startTime);
+				pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Text: %f ms\n",linuxTimeInMs()-startTime);
 				break;
 
 			//TODO:
@@ -660,10 +660,7 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 	}
 
 	endTime = linuxTimeInMs();
-	//printf("Composited all: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
-
-	//printf("-----\n");
-
+	pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Composited all: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
 }
 
 void PiSlideRenderer::removeSlideFromDisplay()
@@ -714,11 +711,9 @@ void PiSlideRenderer::removeSlideFromDisplay()
 	}
 
 	endTime = linuxTimeInMs();
-	printf("Removed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
+	pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::removeSlideFromDisplay: Removed All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
 
 	vc_dispmanx_update_submit_sync(update);
-
-	printf("-----\n");
 }
 
 float PiSlideRenderer::getOpacity()

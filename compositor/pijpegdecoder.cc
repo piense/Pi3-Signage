@@ -13,6 +13,7 @@ extern "C"
 #include "../PiSignageLogging.h"
 
 //use with nodeID OMX_ALL to start, not getting much data from jpegs (?)
+//Not working yet, very picky about where in the process it's called
 void printChildNodes(uint32_t nodeID, OMX_HANDLETYPE handle)
 {
 	int ret2;
@@ -369,8 +370,10 @@ int PiImageDecoder::startupImageDecoder()
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"JPEG Decoder: startupImageDecoder()\n");
 
     // move to idle
-    if(ilclient_change_component_state(component, OMX_StateIdle) != 0)
-    	printf("startupImageDecoder: Failed to transition to idle.\n");
+    if(ilclient_change_component_state(component, OMX_StateIdle) != 0){
+    	pis_logMessage(PIS_LOGLEVEL_ERROR, "startupImageDecoder: Error: failed to transition to idle.\n");
+    	return -1;
+    }
 
     pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Setting port image format\n");
     // set input image format
@@ -382,6 +385,7 @@ int PiImageDecoder::startupImageDecoder()
     imagePortFormat.eCompressionFormat = OMX_IMAGE_CodingJPEG;
     OMX_SetParameter(handle,
 		     OMX_IndexParamImagePortFormat, &imagePortFormat);
+    //TODO: ERROR CHECK
 
     // get buffer requirements
     OMX_PARAM_PORTDEFINITIONTYPE portdef;
@@ -390,6 +394,7 @@ int PiImageDecoder::startupImageDecoder()
     portdef.nPortIndex = inPort;
     OMX_GetParameter(handle,
 		     OMX_IndexParamPortDefinition, &portdef);
+    //TODO: ERROR CHECK
 
     uint32_t bufSize = portdef.nBufferSize;
 
@@ -402,6 +407,7 @@ int PiImageDecoder::startupImageDecoder()
 
     pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Setting port parameters\n");
     OMX_SetParameter(handle, OMX_IndexParamPortDefinition, &portdef);
+    //TODO: ERROR CHECK
 
     // enable the port and setup the buffers
     OMX_SendCommand(handle, OMX_CommandPortEnable, inPort, NULL);
@@ -426,7 +432,7 @@ int PiImageDecoder::startupImageDecoder()
 						   thisBufsize,
     					   inputBuf+i*bufSize);
     	if(ret != OMX_ErrorNone) {
-    			printf("Allocate resize input buffer, err: %x\n",ret);
+    			pis_logMessage(PIS_LOGLEVEL_ERROR, "Allocate resize input buffer, err: %x\n",ret);
     			return -1;
     		}
     	ibBufferHeader[i]->nFilledLen = thisBufsize;
@@ -507,7 +513,7 @@ int PiImageDecoder::setupOpenMaxJpegDecoder()
     	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed at prepareImageDecoder %d\n", ret);
     	return ret;
     }else{
-    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: prepareImageDecoder suceeded\n");
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: prepareImageDecoder succeeded\n");
     }
     
     ret = startupImageDecoder();
@@ -516,7 +522,7 @@ int PiImageDecoder::setupOpenMaxJpegDecoder()
     	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed at startupImageDecoder %d\n", ret);
     	return ret;
     }else{
-    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: startupImageDecoder suceeded\n");
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: startupImageDecoder succeeded\n");
     }
 
     return 0;

@@ -7,7 +7,7 @@
 
 
 
-int pis_loggingLevel = PIS_LOGLEVEL_WARNING;
+PisLogLevels pis_loggingLevel = PIS_LOGLEVEL_WARN;
 
 void printState(OMX_HANDLETYPE handle) {
     OMX_STATETYPE state;
@@ -29,7 +29,7 @@ void printState(OMX_HANDLETYPE handle) {
     }
 }
 
-void pis_logMessage(int level, const char *fmt, ...)
+void pis_logMessage(PisLogLevels level, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);

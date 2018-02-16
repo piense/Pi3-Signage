@@ -118,7 +118,7 @@ int pis_loadDirectory(const char* directory)
 	d = opendir(directory);
 
 	if(d == NULL){
-		printf("Error opening images directory.\n");
+		pis_logMessage(PIS_LOGLEVEL_ERROR, "loadDirectory(): sError opening images directory.\n");
 	}
 
 	pis_slides_s *newSlide;
@@ -134,7 +134,7 @@ int pis_loadDirectory(const char* directory)
 				sprintf(&name[0],"%s",dir->d_name);
 				sprintf(&fullpath[0],"%s/%s",directory,dir->d_name);
 
-				printf("\nAdding: %s %s\n",name,fullpath);
+				pis_logMessage(PIS_LOGLEVEL_INFO,"Adding: %s\n",name);
 
 
 				pis_addNewSlide(&newSlide, 1000,7000,"Image Slide");

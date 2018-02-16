@@ -8,6 +8,7 @@ extern "C"
 
 #include <stdint.h>
 #include "tricks.h"
+#include "piSlideTypes.h"
 
 #define TIMEOUT_MS 200
 
@@ -27,8 +28,7 @@ public:
 			uint16_t srcSliceHeight,
 			uint32_t outputWidth,
 			uint32_t outputHeight,
-			bool crop,
-			bool lockAspect,
+			pis_mediaSizing scaling,
 			sImage **ret
 			);
 
@@ -86,8 +86,13 @@ private:
 	uint32_t srcSize;
 	uint32_t srcStride;
 	uint32_t srcSliceHeight;
-	uint8_t srcColorSpace; //TODO switch to enum
+	OMX_COLOR_FORMATTYPE srcColorSpace; //TODO switch to enum
 	OMX_BUFFERHEADERTYPE *ibBufferHeader;
+
+	uint32_t cropTop;
+	uint32_t cropLeft;
+	uint32_t cropWidth;
+	uint32_t cropHeight;
 
     //Output Buffer stuff
     OMX_BUFFERHEADERTYPE *obHeader;

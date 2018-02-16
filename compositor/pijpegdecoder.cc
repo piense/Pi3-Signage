@@ -250,6 +250,20 @@ int PiImageDecoder::portSettingsChanged()
     portdef.nPortIndex = outPort;
     OMX_GetParameter(handle,
 		     OMX_IndexParamPortDefinition, &portdef);
+/*
+    portdef.format.image.nStride = ALIGN_UP(portdef.format.image.nFrameWidth, 32);
+    //portdef.nBufferSize = portdef.format.image.nStride*portdef.format.image.nFrameHeight * 1.5;
+    ret = OMX_SetParameter(handle,
+    OMX_IndexParamPortDefinition, &portdef);
+    if(ret != OMX_ErrorNone){
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: error adjusting output port: %s\n",OMX_errString(ret));
+    	return -1;
+    }
+    else
+    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output port buffers configured\n");*/
+
+ //   ret = OMX_GetParameter(handle,
+  //      OMX_IndexParamPortDefinition, &portdef);
 
     width = portdef.format.image.nFrameWidth;
     height = portdef.format.image.nFrameHeight;
@@ -382,7 +396,7 @@ int PiImageDecoder::startupImageDecoder()
     //First buffer has to be short, probably for it to read
     //the file header, rest of the file is in the second and third buffer
     //Tried smaller chunks, doesn't seem to like more than 16 input buffers??
-    //TODO Only works for 2 or 3 buffers, not a clue why. Math seems sound
+    //TODO Seems to work at least with 3 - 8 buffers, not a clue why. Math seems sound
     ibBufferCount = 3;
     portdef.nBufferCountActual = 3;
 

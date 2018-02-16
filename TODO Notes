@@ -1,0 +1,27 @@
+TODO notes, far from exhaustive
+
+Image Loader:
+-Support other image formats based on extension
+
+SlideRenderer:
+-Tunnel image loading components
+-GotoNext flag
+-Loop flag
+
+Logger:
+-Use instance per module for finer grained control of debugging
+-stderr output of error messages
+
+Compositor:
+-Put slide loading in a thread so it doesn't hang up the compositing loop
+
+
+General:
+-Video support
+-PTP sync between Pis
+-Airplay support
+-live slide layer
+-slide manager
+-load slides from files
+-dynamic text
+-media management

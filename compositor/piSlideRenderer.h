@@ -42,7 +42,9 @@ public:
 	void removeSlideFromDisplay();
 	void freeSlideResources();
 
-	uint32_t dispmanxLayer;
+	float getOpacity();
+
+	int32_t dispmanxLayer;
 
 	struct pis_slides_s *slide; //TODO move this out of public and safe a few things
 
@@ -55,8 +57,6 @@ private:
 	uint32_t offscreenDispBufferHandle;
 	DISPMANX_RESOURCE_HANDLE_T  offscreenDispResourceHandle;
 	DISPMANX_ELEMENT_HANDLE_T mainDisplayElementHandle;
-
-
 
 	DISPMANX_MODEINFO_T mainDisplayInfo;
 

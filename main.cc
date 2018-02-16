@@ -9,6 +9,8 @@
 #include "graphicsTests.h"
 #include "PiSignageLogging.h"
 
+#include <signal.h>
+#include <cstdlib>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <ifaddrs.h>
@@ -17,8 +19,24 @@
 
 #include <math.h>
 
+int SignageExit = 0;
+
+void stop(int s){
+           printf("Caught signal %d\n",s);
+           SignageExit = 1;
+}
+
+
 int main(int argc, char *argv[])
 {
+
+   struct sigaction sigIntHandler;
+
+   sigIntHandler.sa_handler = stop;
+   sigemptyset(&sigIntHandler.sa_mask);
+   sigIntHandler.sa_flags = 0;
+
+   sigaction(SIGINT, &sigIntHandler, NULL);
 
 	//decoderTest();
 	//resizerTest();
@@ -30,12 +48,14 @@ int main(int argc, char *argv[])
 
 	pis_initializeCompositor();
 
-	while(1)
+	while(!SignageExit)
 	{
 		pis_doCompositor();
 	}
 
 	pis_compositorcleanup();
+
+
 
 	return 0;
 }

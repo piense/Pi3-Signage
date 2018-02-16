@@ -9,6 +9,7 @@ extern "C"
 
 #include "piImageResizer.h"
 #include "tricks.h"
+#include "piSlideTypes.h"
 #include "../PiSignageLogging.h"
 
 PiImageResizer::PiImageResizer(){
@@ -28,8 +29,13 @@ PiImageResizer::PiImageResizer(){
 	srcSize = 0;
 	srcStride = 0;
 	srcSliceHeight = 0;
-	srcColorSpace = 0;
+	srcColorSpace = OMX_COLOR_FormatUnused;
 	ibBufferHeader = NULL;
+
+	cropTop = 0;
+	cropLeft = 0;
+	cropWidth = 0;
+	cropHeight = 0;
 
     //Output Buffer stuff
     obHeader = NULL;
@@ -99,10 +105,6 @@ void PiImageResizer::FillBufferDoneCB(
 void PiImageResizer::error_callback(void *userdata, COMPONENT_T *comp, OMX_U32 data) {
 	pis_logMessage(PIS_LOGLEVEL_ERROR,"Resizer: OMX error %s\n",OMX_errString(data));
 }
-
-#ifndef ALIGN_UP
-#define ALIGN_UP(x,y)  ((x + (y)-1) & ~((y)-1))
-#endif
 
 //Called from decodeImage once the decoder has read the file header and
 //changed the output port settings for the image
@@ -182,9 +184,7 @@ int PiImageResizer::portSettingsChanged()
     	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Output port enabled.\n");
     }
 
-
-    //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->inPort);
-    //resizePrintPort(decoder->imageResizer->handle,decoder->imageResizer->outPort);
+    //printOMXPort(handle,outPort);
 
     return 0;
 }
@@ -249,8 +249,7 @@ int PiImageResizer::startupImageResizer()
     imagePortFormat.nSize = sizeof(OMX_IMAGE_PARAM_PORTFORMATTYPE);
     imagePortFormat.nVersion.nVersion = OMX_VERSION;
     imagePortFormat.nPortIndex = inPort;
-    //TODO Support more color formats
-    imagePortFormat.eColorFormat = OMX_COLOR_FormatYUV420PackedPlanar;
+    imagePortFormat.eColorFormat = srcColorSpace;
     //TODO: Error handler for:
     int ret = OMX_SetParameter(handle,
 		     OMX_IndexParamImagePortFormat, &imagePortFormat);
@@ -277,7 +276,7 @@ int PiImageResizer::startupImageResizer()
     portdef.format.image.nSliceHeight = srcSliceHeight;
 
     portdef.format.image.eCompressionFormat = OMX_IMAGE_CodingUnused;
-    portdef.format.image.eColorFormat = OMX_COLOR_FormatYUV420PackedPlanar;
+    portdef.format.image.eColorFormat = srcColorSpace;
 
     ret = OMX_SetParameter(handle,
 		     OMX_IndexParamPortDefinition, &portdef);
@@ -286,6 +285,21 @@ int PiImageResizer::startupImageResizer()
     			srcHeight, srcWidth, srcSize, srcStride,srcSliceHeight);
     }
 
+
+    OMX_CONFIG_RECTTYPE cropConfiguration;
+
+    cropConfiguration.nSize = sizeof(OMX_CONFIG_RECTTYPE);
+    cropConfiguration.nVersion.nVersion = OMX_VERSION;
+    cropConfiguration.nPortIndex = inPort;
+    cropConfiguration.nLeft = cropLeft;
+    cropConfiguration.nTop = cropTop;
+    cropConfiguration.nHeight = cropHeight;
+    cropConfiguration.nWidth = cropWidth;
+    ret = OMX_SetConfig(handle, OMX_IndexConfigCommonInputCrop, &cropConfiguration);
+    if(ret != OMX_ErrorNone){
+        	pis_logMessage(PIS_LOGLEVEL_ERROR,"Resizer: Error configuring cropping %s.\n ",OMX_errString(ret));
+        	return -1;
+        }
 
     // enable the input port
     ret = OMX_SendCommand(handle,
@@ -366,7 +380,7 @@ int PiImageResizer::setupOpenMaxImageResizer()
     	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: ilclient loaded.\n");
     }
 
-    ilclient_set_error_callback(client, error_callback, NULL);
+    ilclient_set_error_callback(client, error_callback, this);
     //ilclient_set_eos_callback(client, eos_callback, NULL);
     ilclient_set_fill_buffer_done_callback(
     		client, FillBufferDoneCB, this);
@@ -561,6 +575,8 @@ void PiImageResizer::cleanup()
     }
 }
 
+//TODO: Issue size warnings when input or output is YUV:
+//Doesn't like odd sizes on anything or input width not aligned to stride (maybe)
 int PiImageResizer::ResizeImage(char *img,
 		uint32_t width, uint32_t height, //pixels
 		size_t size, //bytes
@@ -569,8 +585,7 @@ int PiImageResizer::ResizeImage(char *img,
 		uint16_t sliceHeight,
 		uint32_t maxOutputWidth,
 		uint32_t maxOutputHeight,
-		bool crop,
-		bool lockAspect,
+		pis_mediaSizing scaling,
 		sImage **ret
 		)
 {
@@ -579,36 +594,76 @@ int PiImageResizer::ResizeImage(char *img,
     int             s;
 
     obDecodedAt = 0;
+    outputPic = NULL;
 
 	float inRatio, outRatio;
+
+	printf("Resizing: %dx%d\n",width,height);
 
 	srcHeight = height;
 	srcWidth = width;
 	srcStride = stride;
 	srcSliceHeight = sliceHeight;
 	srcSize = size;
+	srcColorSpace = imgCoding;
 
-	if(lockAspect == true && crop == false)
+	//Kind of want a 1:1 mode but the renderer is supposed
+	//to be very resolution independent
+	switch(scaling)
 	{
-		inRatio = ((float)srcWidth)/srcHeight;
-		outRatio = ((float)maxOutputWidth)/maxOutputHeight;
-		if(inRatio < outRatio)
-		{
+		case pis_SIZE_CROP:
+			inRatio = ((float)srcWidth)/srcHeight;
+			outRatio = ((float)maxOutputWidth)/maxOutputHeight;
+			if(inRatio < outRatio)
+			{
+				outputWidth = maxOutputWidth;
+				outputHeight = maxOutputHeight;
+				cropTop = (height - ((float)width)/outRatio) / 2.0;
+				cropLeft = 0;
+				cropWidth = width;
+				cropHeight = ((float)width)/outRatio;
+			}else{
+				outputHeight = maxOutputHeight;
+				outputWidth = maxOutputWidth;
+				cropTop = 0;
+				cropLeft = (width - ((float)height)*outRatio) / 2.0;
+				cropWidth = ((float)height)*outRatio;
+				cropHeight = height;
+			}
+			printf("Cropping. Src: %dx%d. New: %dx%d at %d,%d\n", width, height,
+					cropWidth, cropHeight, cropLeft, cropTop);
+			break;
+		case pis_SIZE_SCALE:
+			cropTop = 0;
+			cropLeft = 0;
+			cropWidth = width;
+			cropHeight = height;
+			inRatio = ((float)srcWidth)/srcHeight;
+			outRatio = ((float)maxOutputWidth)/maxOutputHeight;
+			if(inRatio < outRatio)
+			{
+				outputHeight = maxOutputHeight;
+				outputWidth = ((float)maxOutputHeight)*inRatio;
+			}else{
+				outputWidth = maxOutputWidth;
+				outputHeight = ((float)maxOutputWidth)/inRatio;
+			}
+			break;
+		case pis_SIZE_STRETCH:
+			cropTop = 0;
+			cropLeft = 0;
+			cropWidth = width;
+			cropHeight = height;
 			outputHeight = maxOutputHeight;
-			outputWidth = ((float)maxOutputHeight)*inRatio;
-		}else{
 			outputWidth = maxOutputWidth;
-			outputHeight = inRatio/((float)maxOutputWidth);
-		}
-	}else if(lockAspect == true && crop == true){
-		//TODO: Cropping image
-		outputWidth = maxOutputWidth;
-		outputHeight = maxOutputHeight;
+			break;
 	}
+
+	if(cropWidth <= 0 || cropHeight <= 0 || outputHeight <= 0 || outputWidth <= 0)
+		return NULL;
 
 	imgBuf = (uint8_t *)img;
 	obDecodedAt = 0;
-
 
     bcm_host_init();
 
@@ -629,7 +684,6 @@ int PiImageResizer::ResizeImage(char *img,
     	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Image decoder succeeded, cleaning up.\n");
     }
 
-
     cleanup();
 
 	*ret = new sImage;
@@ -640,7 +694,7 @@ int PiImageResizer::ResizeImage(char *img,
 	}
 
 	//TODO: get colorSpace from the port settings
-	(*ret)->colorSpace = OMX_COLOR_FormatYUV420PackedPlanar;
+	(*ret)->colorSpace = OMX_COLOR_Format32bitARGB8888;
 	(*ret)->imageBuf = outputPic;
 	(*ret)->imageSize = obDecodedAt;
 	(*ret)->imageWidth = outputWidth;

@@ -9,10 +9,6 @@
 #include "fontTest.h"
 
 
-#ifndef ALIGN_UP
-#define ALIGN_UP(x,y)  ((x + (y)-1) & ~((y)-1))
-#endif
-
 PiSlideRenderer::PiSlideRenderer()
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::PiSlideRenderer()\n");
@@ -30,7 +26,7 @@ PiSlideRenderer::PiSlideRenderer()
 
     int ret = vc_dispmanx_display_get_info( mainDisplay, &mainDisplayInfo);
     if(ret != 0){
-    	pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer: Error, unable to get info from main display\n");
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer: Error, unable to get info from main dispslay\n");
     	//TODO Fail harder
     	//return;
     	//DON'T RETURN: FLAG ERROR AND INITIALIZE OTHER VARIABLES
@@ -166,66 +162,111 @@ void PiSlideRenderer::setDispmanxLayer(uint32_t layer)
 	dispmanxLayer = layer;
 }
 
-sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight)
+
+sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_mediaSizing scaling)
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::loadImage: %s\n",filename);
 
+	sImage *ret1 = NULL;
+	sImage *ret2 = NULL;
+	sImage *ret3 = NULL;
+	PiImageDecoder decoder;
+	PiImageResizer resize;
+	int err;
+	bool extraLine = false;
+	bool extraColumn = false;
+	double endMs;
 	double startMs = linuxTimeInMs();
 
-	PiImageDecoder decoder;
-	sImage *ret1 = NULL;
+	//TODO: Create a component with the decoding, color space, and resize tunneled together
 
+	err = decoder.DecodeJpegImage(filename, &ret1);
 
-	int retErr = decoder.DecodeJpegImage(filename, &ret1);
-
-	if(retErr != 0 || ret1 == NULL)
+	if(err != 0 || ret1 == NULL)
 	{
-		if(ret1 != NULL)
-			free(ret1);
 		pis_logMessage(PIS_LOGLEVEL_ERROR, "loadImage: Error loading JPEG %s\n", filename);
-		return NULL;
+		goto error;
 	}
-
-	printf("Loaded image in %f seconds.\n",(linuxTimeInMs()-startMs)/1000.0);
-
-	startMs = linuxTimeInMs();
 
 	pis_logMessage(PIS_LOGLEVEL_ALL,"Compositor: Returned from decoder: %dx%d Size: %d Stride: %d Slice Height: %d\n",
 			ret1->imageWidth,ret1->imageHeight,
 			ret1->imageSize, ret1->stride, ret1->sliceHeight
 			);
 
+	//Decoder buffer logic makes this save, sliceHeight is always rounded up to an even number
+	if(ret1->imageHeight%2 != 0) { ret1->imageHeight += 1; extraLine = true; }
+	if(ret1->imageWidth%2 != 0) { ret1->imageWidth += 1; extraColumn = true; }
 
-	pis_logMessage(PIS_LOGLEVEL_ALL,"Compositor: Resizing image to %dx%d\n",maxWidth,maxHeight);
-
-	sImage *ret2 = NULL;
-
-	PiImageResizer resize1;
-    int err2 =  resize1.ResizeImage (
-    		(char *)ret1->imageBuf,
-    		ret1->imageWidth, ret1->imageHeight,
-    		ret1->imageSize,
+	//Resizer does odd things with YUV so
+	//Convert to ARGB8888 first
+	err =  resize.ResizeImage (
+			(char *)ret1->imageBuf,
+			ret1->imageWidth, ret1->imageHeight,
+			ret1->imageSize,
 			(OMX_COLOR_FORMATTYPE) ret1->colorSpace,
 			ret1->stride,
 			ret1->sliceHeight,
-			maxWidth,maxHeight,
-			0, 1,
+			ret1->imageWidth, ret1->imageHeight,
+			pis_SIZE_STRETCH,
 			&ret2
 			);
 
-    if(err2 != 0)
-    {
-    	printf("Error resizing image.\n");
-    }
+	if(extraLine == true) ret2->imageHeight--;
+	if(extraColumn == true) ret2->imageWidth--;
 
-    double endMs = linuxTimeInMs();
+	if(err != 0 || ret2 == NULL)
+	{
+		pis_logMessage(PIS_LOGLEVEL_ERROR, "loadImage: Error converting color space\n");
+		goto error;
+	}
+
+	err =  resize.ResizeImage (
+			(char *)ret2->imageBuf,
+			ret2->imageWidth, ret2->imageHeight,
+			ret2->imageSize,
+			(OMX_COLOR_FORMATTYPE) ret2->colorSpace,
+			ret2->stride,
+			ret2->sliceHeight,
+			maxWidth,maxHeight,
+			scaling,
+			&ret3
+			);
+
+	if(err != 0 || ret3 == NULL)
+	{
+		pis_logMessage(PIS_LOGLEVEL_ERROR, "loadImage: Error resizing image.\n");
+		goto error;
+	}
+
+	free(ret2->imageBuf);
+	free(ret2);
 
     free(ret1->imageBuf);
 
     free(ret1);
 
+    endMs = linuxTimeInMs();
+
     printf("Resized image in %f seconds.\n",(endMs-startMs)/1000.0);
-	return ret2;
+	return ret3;
+
+	error:
+	if(ret1 != NULL && ret1->imageBuf != NULL)
+		free(ret1->imageBuf);
+	if(ret1 != NULL)
+		free(ret1);
+
+	if(ret2 != NULL && ret2->imageBuf != NULL)
+		free(ret2->imageBuf);
+	if(ret2 != NULL)
+		free(ret2);
+
+	if(ret3 != NULL && ret3->imageBuf != NULL)
+		free(ret3);
+	if(ret3 != NULL)
+		free(ret3);
+
+	return NULL;
 }
 
 void PiSlideRenderer::freeSlideResources()
@@ -337,7 +378,8 @@ void PiSlideRenderer::loadSlideResources()
 				{
 					sImage *img = loadImage(dataImg->filename,
 							dataImg->maxWidth * mainDisplayInfo.width,
-							dataImg->maxHeight * mainDisplayInfo.height);
+							dataImg->maxHeight * mainDisplayInfo.height,
+							dataImg->sizing);
 
 					if(img == NULL || img->imageBuf == NULL)
 					{
@@ -470,6 +512,8 @@ void PiSlideRenderer::doUpdate(uint32_t update)
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::doUpdate(%d)\n",update);
 
 	float ms=linuxTimeInMs();
+
+	//TODO Put states into switch statement
 
 	if(state == SLIDE_STATE_APPEARING){
 		opacity = ((float)(ms-slideStartTime))/slide->dissolve;
@@ -675,4 +719,9 @@ void PiSlideRenderer::removeSlideFromDisplay()
 	vc_dispmanx_update_submit_sync(update);
 
 	printf("-----\n");
+}
+
+float PiSlideRenderer::getOpacity()
+{
+	return opacity;
 }

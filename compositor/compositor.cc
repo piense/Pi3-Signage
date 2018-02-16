@@ -22,10 +22,6 @@ extern "C"
 #include "../PiSignageLogging.h"
 
 pis_compositor_s pis_compositor;
-//TODO: put this in a struct and out of the global namespace
-
-DISPMANX_UPDATE_HANDLE_T    update;
-VC_RECT_T srcRect, screenRect;
 
 pis_compositorErrors pis_addNewSlide(
 		pis_slides_s **ret, uint32_t dissolveTime, uint32_t duration, const char *name)
@@ -115,8 +111,6 @@ pis_compositorErrors pis_AddImageToSlide(pis_slides_s *slide, char* file,
 	return pis_COMPOSITOR_ERROR_NONE;
 }
 
-
-
 int pis_loadDirectory(const char* directory)
 {
 	DIR           *d;
@@ -128,8 +122,6 @@ int pis_loadDirectory(const char* directory)
 	}
 
 	pis_slides_s *newSlide;
-
-	int loadQuadrant = 0;
 
 	char name[1000];
 	char fullpath[1000];
@@ -144,39 +136,14 @@ int pis_loadDirectory(const char* directory)
 
 				printf("\nAdding: %s %s\n",name,fullpath);
 
-				switch(loadQuadrant)
-				{
-				case 0:
-					pis_addNewSlide(&newSlide, 1000,5000,"Image Slide");
-					pis_AddTextToSlide(newSlide,&name[0],"",30.0/1080.0,.25,.45,0xFF000000);
-					pis_AddImageToSlide(newSlide,&fullpath[0],
-							.25,.25, //position [0,1]
-							.5,.5 //size [0,1]
-							,pis_SIZE_SCALE);
-					break;
-				case 1:
-					pis_AddTextToSlide(newSlide,&name[0],"",30.0/1080.0,.75,.45,0xFF000000);
-					pis_AddImageToSlide(newSlide,&fullpath[0],
-							.75,.25, //position [0,1]
-							.5,.5 //size [0,1]
-							,pis_SIZE_SCALE);
-					break;
-				case 2:
-					pis_AddTextToSlide(newSlide,&name[0],"",30.0/1080.0,.25,.95,0xFF000000);
-					pis_AddImageToSlide(newSlide,&fullpath[0],
-							.25,.75, //position [0,1]
-							.5,.5 //size [0,1]
-							,pis_SIZE_SCALE);
-					break;
-				case 3:
-					pis_AddTextToSlide(newSlide,&name[0],"",30.0/1080.0,.75,.95,0xFF000000);
-					pis_AddImageToSlide(newSlide,&fullpath[0],
-							.75,.75, //position [0,1]
-							.5,.5 //size [0,1]
-							,pis_SIZE_SCALE);
-					break;
-				}
-				loadQuadrant = (loadQuadrant+1)%4;
+
+				pis_addNewSlide(&newSlide, 1000,7000,"Image Slide");
+				pis_AddTextToSlide(newSlide,&name[0],"",30.0/1080.0,.5,.95,0xFFFFFFFF);
+
+				pis_AddImageToSlide(newSlide,&fullpath[0],
+						.5,.5, //position [0,1]
+						1,1 //size [0,1]
+						,pis_SIZE_CROP);
 			}
 
 		}
@@ -252,8 +219,8 @@ bool slideRenderersAppearing(){
 
 void slideRenderersResort(int topRenderer){
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"slideRenderesAppearing()\n");
-	uint32_t highestLayer = 0;
-	uint32_t lowestLayer = 0;
+	int32_t highestLayer = 0;
+	int32_t lowestLayer = 60000;
 
 	for(int i = 0;i<pis_compositor.numOfRenderers;i++)
 	{
@@ -268,13 +235,13 @@ void slideRenderersResort(int topRenderer){
 
 	for(int i = 0;i<pis_compositor.numOfRenderers;i++)
 	{
-		pis_compositor.slideRenderers[i].dispmanxLayer -= lowestLayer + 5;
+		pis_compositor.slideRenderers[i].dispmanxLayer -= lowestLayer - 5;
 	}
 }
 
 pis_compositorErrors pis_compositorcleanup()
 {
-	//TODO pis_DR cleanup
+
 
 	return pis_COMPOSITOR_ERROR_NONE;
 }
@@ -284,6 +251,9 @@ double msLastPrint;
 pis_compositorErrors pis_doCompositor()
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"pis_doCompositor()\n");
+
+	DISPMANX_UPDATE_HANDLE_T    update;
+
 	pis_logMessage(PIS_LOGLEVEL_ALL,"pis_compositor.pbState: %d\n",pis_compositor.pbState);
 
 	double ms = linuxTimeInMs();

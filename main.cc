@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <unistd.h>
 
-#include "compositor/compositor.h"
 #include "compositor/tricks.h"
 #include "graphicsTests.h"
 #include "PiSignageLogging.h"
@@ -18,6 +17,7 @@
 #include <net/if.h>
 
 #include <math.h>
+#include "compositor/PiSlideShow.h"
 
 int SignageExit = 0;
 
@@ -46,16 +46,14 @@ int main(int argc, char *argv[])
 
 	//TODO: Catch Ctrl+C for cleanup
 
-	pis_initializeCompositor();
+	pis_SlideShow slideshow;
+
+	slideshow.LoadDirectory("/mnt/data/images");
 
 	while(!SignageExit)
 	{
-		pis_doCompositor();
+		slideshow.DoSlideShow();
 	}
-
-	pis_compositorcleanup();
-
-
 
 	return 0;
 }

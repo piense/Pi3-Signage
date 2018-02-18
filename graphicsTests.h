@@ -2,7 +2,7 @@
 
 #include <sys/resource.h>
 
-#include "compositor/compositor.h"
+#include "compositor/PiSlideShow.h"
 #include "compositor/tricks.h"
 
 void printCPUandGPUMemory();

@@ -7,7 +7,6 @@ extern "C"
 #include "ilclient/ilclient.h"
 }
 
-#include "piresizer.h"
 #include "pijpegdecoder.h"
 #include "tricks.h"
 #include "../PiSignageLogging.h"
@@ -132,7 +131,7 @@ void PiImageDecoder::EmptyBufferDoneCB(
 			pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Error accessing input buffers\n");
 			return;
 		}else{
-			pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Using input buffer %d\n",decoder->ibIndex);
+			pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Using input buffer %d\n",decoder->ibIndex);
 		}
 
 		// get next buffer from array
@@ -186,7 +185,7 @@ void PiImageDecoder::FillBufferDoneCB(
 
 	//TODO: output directly to the image buffer
 	if(decoder->obHeader != NULL){
-		pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: More data put in the buffer\n");
+		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: More data put in the buffer\n");
 
 		if(decoder->obHeader->nFilledLen + decoder->obDecodedAt > decoder->obHeader->nAllocLen){
 			pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: ERROR overrun of decoded image buffer\n %d %d %d\n",
@@ -205,11 +204,11 @@ void PiImageDecoder::FillBufferDoneCB(
 
 	    //See if we've reached the end of the stream
 	    if (decoder->obHeader->nFlags & OMX_BUFFERFLAG_EOS) {
-	    	pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Output buffer EOS received\n");
+	    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output buffer EOS received\n");
 	    	decoder->obGotEOS = 1;
 	    }else{
 	    	//Not sure if this is a valid case with only one buffer
-	    	pis_logMessage(PIS_LOGLEVEL_INFO,"JPEG Decoder: Output buffer asking for more data\n");
+	    	pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Output buffer asking for more data\n");
 			int ret = OMX_FillThisBuffer(decoder->handle,
 					decoder->obHeader);
 			if (ret != OMX_ErrorNone) {
@@ -754,13 +753,12 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
     }
 
     cleanup();
-    free(inputBuf);
+    delete [] inputBuf;
     inputBuf = NULL;
 
 	*ret = new sImage;
 	if(ret == NULL){
 		pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Failed to allocate sImage ret structure.\n");
-		free(ret);
 		return -1;
 	}
 
@@ -781,7 +779,7 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
 	if(imgBuf != NULL)
 	{
 		pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Cleaning up imgBuf\n");
-		free(imgBuf);
+		delete [] imgBuf;
 	}
 
 	pis_logMessage(PIS_LOGLEVEL_ERROR,"JPEG Decoder: Exiting with error.\n");
@@ -794,7 +792,7 @@ int PiImageDecoder::DecodeJpegImage(const char *img, sImage **ret)
 
     pis_logMessage(PIS_LOGLEVEL_ALL,"JPEG Decoder: Freeing sourceImage\n");
     if(inputBuf != NULL)
-    	free(inputBuf);
+    	delete [] inputBuf;
 
     return -1;
 

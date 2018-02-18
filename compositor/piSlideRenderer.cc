@@ -2,13 +2,17 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <list>
 
 #include "tricks.h"
 #include "pijpegdecoder.h"
 #include "piImageResizer.h"
 #include "fontTest.h"
 
+using namespace std;
 
+//Gets info on the display, sets up offscreen drawing buffer, and adds a window to the main display
+//initializes other things too
 PiSlideRenderer::PiSlideRenderer()
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::PiSlideRenderer()\n");
@@ -26,7 +30,7 @@ PiSlideRenderer::PiSlideRenderer()
 
     int ret = vc_dispmanx_display_get_info( mainDisplay, &mainDisplayInfo);
     if(ret != 0){
-    	pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer: Error, unable to get info from main dispslay\n");
+    	pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer: Error, unable to get info from main display\n");
     	//TODO Fail harder
     	//return;
     	//DON'T RETURN: FLAG ERROR AND INITIALIZE OTHER VARIABLES
@@ -90,11 +94,9 @@ PiSlideRenderer::PiSlideRenderer()
 	if(ret != 0)
 		pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer: Unable to copy black slide to resource\n");
 
-	free(black);
+	delete [] black;
 
     uint32_t update = vc_dispmanx_update_start(10);
-
-
 
 	mainDisplayElementHandle = vc_dispmanx_element_add(update,
 			mainDisplay,
@@ -165,7 +167,10 @@ void PiSlideRenderer::setDispmanxLayer(uint32_t layer)
 }
 
 
-sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_mediaSizing scaling)
+//Loads an image file and resizes to the appropriate dimensions
+//Uses the Pis OpenMAX components. Decodes the file, converts it to ARGB, then resizes it.
+//Must use RGB for resizing or there are a bunch of restrictions on odd dimensions
+sImage * loadImage(const char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_mediaSizing scaling)
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"PiSlideRenderer::loadImage: %s\n",filename);
 
@@ -195,7 +200,7 @@ sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_me
 			ret1->imageSize, ret1->stride, ret1->sliceHeight
 			);
 
-	//Decoder buffer logic makes this save, sliceHeight is always rounded up to an even number
+	//Decoder buffer logic makes this safe, sliceHeight and stride are always rounded up to an even number
 	if(ret1->imageHeight%2 != 0) { ret1->imageHeight += 1; extraLine = true; }
 	if(ret1->imageWidth%2 != 0) { ret1->imageWidth += 1; extraColumn = true; }
 
@@ -222,6 +227,7 @@ sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_me
 		goto error;
 	}
 
+	//Finally get the image into the size we need it
 	err =  resize.ResizeImage (
 			(char *)ret2->imageBuf,
 			ret2->imageWidth, ret2->imageHeight,
@@ -254,19 +260,17 @@ sImage * loadImage(char *filename, uint16_t maxWidth, uint16_t maxHeight, pis_me
 
 	error:
 	if(ret1 != NULL && ret1->imageBuf != NULL)
-		free(ret1->imageBuf);
+		delete [] ret1->imageBuf;
 	if(ret1 != NULL)
-		free(ret1);
+		delete ret1;
 
 	if(ret2 != NULL && ret2->imageBuf != NULL)
-		free(ret2->imageBuf);
+		delete [] ret2->imageBuf;
 	if(ret2 != NULL)
-		free(ret2);
+		delete ret2;
 
-	if(ret3 != NULL && ret3->imageBuf != NULL)
-		free(ret3);
 	if(ret3 != NULL)
-		free(ret3);
+		delete ret3;
 
 	return NULL;
 }
@@ -286,30 +290,40 @@ void PiSlideRenderer::freeSlideResources()
 		return;
 	}
 
-	pis_mediaElementList_s *current = slide->mediaElementsHead;
-
 	pis_mediaImage* dataImg = NULL;
-	pis_mediaText* dataTxt = NULL;
+	//pis_mediaText* dataTxt = NULL;
+	pis_SlideGraphicsProperties *graphicsProps = NULL;
 
-	while(current != NULL){
-		switch(current->mediaElement.mediaType){
+	for(list<pis_mediaElement>::iterator it = slide->mediaElements.begin(); it != slide->mediaElements.end(); ++it)
+	{
+		switch(it->mediaType){
 			case pis_MEDIA_IMAGE:
-				dataImg = ((pis_mediaImage *)current->mediaElement.data);
+				if(it->data == NULL){
+					pis_logMessage(PIS_LOGLEVEL_WARN, "PiSlideRenderer::freeSlideResources(): No media data in element\n");
+					break;
+				}
 
-				if(dataImg->element != 0)
-					pis_logMessage(PIS_LOGLEVEL_WARN, "PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
+				dataImg = ((pis_mediaImage *)it->data);
 
 				if(dataImg->cache.img != NULL)
-					free(dataImg->cache.img);
+					delete [] dataImg->cache.img;
 
 				dataImg->cache.img = NULL;
 				dataImg->cache.width =  0;
 				dataImg->cache.height =  0;
 				dataImg->cache.stride = 0;
 
-				if(dataImg->res != 0){
-					vc_dispmanx_resource_delete(dataImg->res);
-					dataImg->res = 0;
+				if(it->appData != NULL)
+				{
+					graphicsProps = (pis_SlideGraphicsProperties*)it->appData;
+					if(graphicsProps->element != 0)
+						pis_logMessage(PIS_LOGLEVEL_WARN, "PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
+					if(graphicsProps->res != 0){
+						vc_dispmanx_resource_delete(graphicsProps->res);
+						graphicsProps->res = 0;
+					}
+					delete (pis_SlideGraphicsProperties *) it->appData;
+					it->appData = NULL;
 				}
 
 				break;
@@ -320,21 +334,26 @@ void PiSlideRenderer::freeSlideResources()
 				break;
 
 			case pis_MEDIA_TEXT:
-				dataTxt = ((pis_mediaText *)current->mediaElement.data);
+				//dataTxt = ((pis_mediaText *)it->data);
 
-				if(dataTxt->element != 0)
-					pis_logMessage(PIS_LOGLEVEL_WARN,"PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
-
-				if(dataTxt->res != 0){
-					vc_dispmanx_resource_delete(dataTxt->res);
-					dataTxt->res = 0;
+				if(it->appData != NULL)
+				{
+					graphicsProps = (pis_SlideGraphicsProperties*)it->appData;
+					if(graphicsProps->element != 0)
+						pis_logMessage(PIS_LOGLEVEL_WARN, "PiSlideRenderer::freeSlideResources(): Deleting a resource in use, this will probably end poorly.\n");
+					if(graphicsProps->res != 0){
+						vc_dispmanx_resource_delete(graphicsProps->res);
+						graphicsProps->res = 0;
+					}
+					delete (pis_SlideGraphicsProperties *) it->appData;
+					it->appData = NULL;
 				}
+
 				break;
 
 			//TODO:
 			case pis_MEDIA_AUDIO: break;
 		}
-		current = current->next;
 	}
 
 	endTime = linuxTimeInMs();
@@ -361,27 +380,50 @@ void PiSlideRenderer::loadSlideResources()
 	}
 
 	pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loading slide resources\n");
+
 	double startTime, endTime;
 	double startTime2 = linuxTimeInMs();
 	int ret;
 
 	pis_mediaImage* dataImg = NULL;
 	pis_mediaText* dataTxt = NULL;
+	pis_SlideGraphicsProperties *graphicsProps = NULL;
 
-	pis_mediaElementList_s *current = slide->mediaElementsHead;
+	for(list<pis_mediaElement>::iterator it = slide->mediaElements.begin(); it != slide->mediaElements.end(); ++it)
+	{
+		if(it->appData == NULL){
+			it->appData = new pis_SlideGraphicsProperties();
+			graphicsProps = (pis_SlideGraphicsProperties *) it->appData;
+			if(graphicsProps != NULL){
+				graphicsProps->element = 0;
+				graphicsProps->imgHandle = 0;
+				graphicsProps->res = 0;
+			}
+		}
+		else
+		if(it->appData == NULL)
+		{
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer::loadSlideResources: Error allocating graphicsProps\n");
+			continue;
+		}
+		graphicsProps = (pis_SlideGraphicsProperties *) it->appData;
 
-	while(current != NULL){
-		switch(current->mediaElement.mediaType){
+		if(it->data == NULL){
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer::loadSlideResources: Error: No media data\n");
+			continue;
+		}
+
+		switch(it->mediaType){
 			case pis_MEDIA_IMAGE:
 				pis_logMessage(PIS_LOGLEVEL_ALL,"Adding image to slide buffer\n");
 				//TODO: range check width & height
 				startTime = linuxTimeInMs();
 
-				dataImg = ((pis_mediaImage *)current->mediaElement.data);
+				dataImg = ((pis_mediaImage *)it->data);
 
-				if(dataImg->res == 0)
+				if(graphicsProps->res == 0)
 				{
-					sImage *img = loadImage(dataImg->filename,
+					sImage *img = loadImage(dataImg->filename.c_str(),
 							dataImg->maxWidth * mainDisplayInfo.width,
 							dataImg->maxHeight * mainDisplayInfo.height,
 							dataImg->sizing);
@@ -399,12 +441,12 @@ void PiSlideRenderer::loadSlideResources()
 
 					free(img);
 
-					dataImg->res = 0;
-					dataImg->res = vc_dispmanx_resource_create(VC_IMAGE_ARGB8888, //ARGB for pngs later on
+					graphicsProps->res = 0;
+					graphicsProps->res = vc_dispmanx_resource_create(VC_IMAGE_ARGB8888, //ARGB for pngs later on
 							dataImg->cache.width,dataImg->cache.height,
-							&dataImg->imgHandle);
+							&graphicsProps->imgHandle);
 
-					if(dataImg->res == 0){
+					if(graphicsProps->res == 0){
 						free(dataImg->cache.img);
 						dataImg->cache.img = NULL;
 						pis_logMessage(PIS_LOGLEVEL_ERROR,"loadSlideResources: Error creating image resource\n");
@@ -412,7 +454,7 @@ void PiSlideRenderer::loadSlideResources()
 					}
 
 					VC_RECT_T rect = {0,0,(int32_t)dataImg->cache.width,(int32_t)dataImg->cache.height };
-					ret = vc_dispmanx_resource_write_data(dataImg->res,
+					ret = vc_dispmanx_resource_write_data(graphicsProps->res,
 							VC_IMAGE_ARGB8888, dataImg->cache.stride,dataImg->cache.img,
 							&rect
 							);
@@ -443,23 +485,23 @@ void PiSlideRenderer::loadSlideResources()
 				startTime = linuxTimeInMs();
 
 				//TODO: range check width & height
-				dataTxt = ((pis_mediaText *)current->mediaElement.data);
+				dataTxt = ((pis_mediaText *)it->data);
 
-				if(dataTxt->res == 0)
+				if(graphicsProps->res == 0)
 				{
 					//TODO Need to factor in stride for dispmanx to be happy
 					//at all resolutions
-					dataTxt->res = vc_dispmanx_resource_create(VC_IMAGE_ARGB8888,
+					graphicsProps->res = vc_dispmanx_resource_create(VC_IMAGE_ARGB8888,
 							mainDisplayInfo.width,mainDisplayInfo.height,
-							&((pis_mediaText *)current->mediaElement.data)->imgHandle);
+							&graphicsProps->imgHandle);
 
-					if(dataTxt->res == 0)
+					if(graphicsProps->res == 0)
 					{
 						pis_logMessage(PIS_LOGLEVEL_ERROR,"loadSlideResources Error: Couldn't allocate resource for text.\n");
 						break;
 					}
 
-					//Might just put this malloc somewhere globally to avoid time allocating every time
+					//Might just put this 'new' somewhere globally to avoid time allocating every time
 					uint32_t *temp= new uint32_t[mainDisplayInfo.width*mainDisplayInfo.height];
 
 					if(temp == NULL){
@@ -475,7 +517,7 @@ void PiSlideRenderer::loadSlideResources()
 							dataTxt->x * mainDisplayInfo.width,
 							dataTxt->y * mainDisplayInfo.height,
 							dataTxt->fontHeight * mainDisplayInfo.height,
-							dataTxt->text,
+							dataTxt->text.c_str(),
 							(dataTxt->color & 0x00FF0000)>>16,
 							(dataTxt->color & 0x0000FF00)>>8,
 							dataTxt->color & 0x000000FF,
@@ -483,7 +525,7 @@ void PiSlideRenderer::loadSlideResources()
 							);
 
 					VC_RECT_T rectTxt = {0,0,(int32_t)mainDisplayInfo.width,(int32_t)mainDisplayInfo.height};
-					ret = vc_dispmanx_resource_write_data(dataTxt->res,
+					ret = vc_dispmanx_resource_write_data(graphicsProps->res,
 							VC_IMAGE_ARGB8888, mainDisplayInfo.width*4,temp,
 							&rectTxt
 							);
@@ -491,7 +533,7 @@ void PiSlideRenderer::loadSlideResources()
 					if(ret != 0)
 						pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::loadSlideResources: Error writing image data to dispmanx resource\n");
 
-					free(temp);
+					delete [] temp;
 				}
 
 				pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loaded Text: %f\n",linuxTimeInMs()-startTime);
@@ -500,12 +542,10 @@ void PiSlideRenderer::loadSlideResources()
 			//TODO:
 			case pis_MEDIA_AUDIO: break;
 		}
-		current = current->next;
 	}
 
 	endTime = linuxTimeInMs();
 	pis_logMessage(PIS_LOGLEVEL_INFO, "PiSlideRenderer::loadSlideResources: Loaded All: %f ms, %f fps.\n",endTime - startTime2,1000/(endTime - startTime2));
-
 
 	state = SLIDE_STATE_LOADED;
 }
@@ -520,7 +560,7 @@ void PiSlideRenderer::doUpdate(uint32_t update)
 	//TODO Put states into switch statement
 
 	if(state == SLIDE_STATE_APPEARING){
-		opacity = ((float)(ms-slideStartTime))/slide->dissolve;
+		opacity = ((float)(ms-slideStartTime))/slide->GetDissolveTime();
 		if(opacity > 1)	{
 			opacity = 1;
 			state = SLIDE_STATE_LIVE;
@@ -528,7 +568,7 @@ void PiSlideRenderer::doUpdate(uint32_t update)
 	}
 
 	if(slide != NULL && state == SLIDE_STATE_LIVE &&
-			ms > slideStartTime + slide->dissolve + slide->duration)
+			ms > slideStartTime + slide->GetDissolveTime() + slide->GetHoldTime())
 	{
 		state = SLIDE_STATE_EXPIRED;
 	}
@@ -575,42 +615,51 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 	if(slide == NULL)
 		return;
 
-	pis_mediaElementList_s *current = slide->mediaElementsHead;
 	pis_mediaImage *dataImg = NULL;
-    pis_mediaText *dataTxt = NULL;
+//    pis_mediaText *dataTxt = NULL;
+	pis_SlideGraphicsProperties *graphicsProps = NULL;
 
 	startTime = linuxTimeInMs();
 
 	int layer = 2000;
 
-	while(current != NULL){
-		switch(current->mediaElement.mediaType){
+	for(list<pis_mediaElement>::iterator it = slide->mediaElements.begin(); it != slide->mediaElements.end(); ++it)
+	{
+		if(it->data == NULL || it->appData == NULL)
+		{
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer::compositeSlide: Error: Media element with no data.\n");
+			continue;
+		}
+
+		graphicsProps = (pis_SlideGraphicsProperties*)it->appData;
+
+		switch(it->mediaType){
 			case pis_MEDIA_IMAGE:
 				startTime = linuxTimeInMs();
-			    dataImg = (pis_mediaImage *)current->mediaElement.data;
+			    dataImg = (pis_mediaImage *)it->data;
 
-				if(dataImg->res == 0)
+				if(graphicsProps->res == 0)
 				{
 					pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Image not loaded\n");
 				}else{
-					if(dataImg->element == 0){
+					if(graphicsProps->element == 0){
 						pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Adding image element\n");
 						VC_RECT_T rectImg = {0,0,(int32_t)dataImg->cache.width<<16,(int32_t)dataImg->cache.height << 16};
 						VC_RECT_T rectImg2 = {(int32_t)(dataImg->x*mainDisplayInfo.width - dataImg->cache.width/2),
 								(int32_t)(dataImg->y*mainDisplayInfo.height - dataImg->cache.height/2),
 								(int32_t)dataImg->cache.width,(int32_t)dataImg->cache.height};
-						dataImg->element = vc_dispmanx_element_add(update,
+						graphicsProps->element = vc_dispmanx_element_add(update,
 								offscreenDisplay,
 							layer++,
 							&rectImg2,
-							dataImg->res,
+							graphicsProps->res,
 							&rectImg,
 							DISPMANX_PROTECTION_NONE,
 							&alpha,
 							NULL,
 							DISPMANX_NO_ROTATE
 							);
-						if(dataImg->element == 0)
+						if(graphicsProps->element == 0)
 							pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Unable to composite image.\n");
 					}else{
 						//Update element properties(?) for animation stuff
@@ -625,28 +674,28 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 
 			case pis_MEDIA_TEXT:
 				startTime = linuxTimeInMs();
-			    dataTxt = (pis_mediaText*)current->mediaElement.data;
+			    //dataTxt = (pis_mediaText*)it->data;
 
-				if(dataTxt->res == 0)
+				if(graphicsProps->res == 0)
 				{
 					pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error: Text not loaded\n");
 				}else{
-					if(dataTxt->element == 0){
+					if(graphicsProps->element == 0){
 						pis_logMessage(PIS_LOGLEVEL_ALL, "PiSlideRenderer::compositeSlide: Adding text element\n");
 						VC_RECT_T rectImg = {0,0,
 								mainDisplayInfo.width<<16,mainDisplayInfo.height<<16};
 
-						dataTxt->element = vc_dispmanx_element_add(update,
+						graphicsProps->element = vc_dispmanx_element_add(update,
 								offscreenDisplay,layer++,
 								&screenRect,
-								dataTxt->res,
+								graphicsProps->res,
 								&rectImg,
 								DISPMANX_PROTECTION_NONE,
 								&alpha,
 								NULL,
 								DISPMANX_NO_ROTATE
 								);
-						if(dataTxt->element == 0)
+						if(graphicsProps->element == 0)
 							pis_logMessage(PIS_LOGLEVEL_ERROR, "PiSlideRenderer::compositeSlide: Error compositing text.\n");
 					}else{
 						//TODO: Update text data, possibly for movement or dynamic text
@@ -658,7 +707,6 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 			//TODO:
 			case pis_MEDIA_AUDIO: break;
 		}
-		current = current->next;
 	}
 
 	endTime = linuxTimeInMs();
@@ -674,22 +722,25 @@ void PiSlideRenderer::removeSlideFromDisplay()
 	if(slide == NULL)
 		return;
 
-	pis_mediaElementList_s *current = slide->mediaElementsHead;
-	pis_mediaImage* dataImg = NULL;
-	pis_mediaText* dataTxt = NULL;
+	pis_SlideGraphicsProperties *graphicsProps = NULL;
 
 	uint32_t update = vc_dispmanx_update_start(10);
 
-	while(current != NULL){
-		switch(current->mediaElement.mediaType){
+	for(list<pis_mediaElement>::iterator it = slide->mediaElements.begin(); it != slide->mediaElements.end(); ++it)
+	{
+		if(it->appData == NULL)
+		{
+			pis_logMessage(PIS_LOGLEVEL_ERROR,"PiSlideRenderer::compositeSlide: Error: Media element with no data.\n");
+			continue;
+		}
+		graphicsProps = (pis_SlideGraphicsProperties *)it->appData;
+		switch(it->mediaType){
 			case pis_MEDIA_IMAGE:
-				dataImg = ((pis_mediaImage *)current->mediaElement.data);
-
-				if(dataImg->element != 0){
-					vc_dispmanx_element_remove(update, dataImg->element);
+				if(graphicsProps->element != 0){
+					vc_dispmanx_element_remove(update, graphicsProps->element);
 				}
 
-				dataImg->element = 0;
+				graphicsProps->element = 0;
 				break;
 
 			//TODO:
@@ -698,18 +749,15 @@ void PiSlideRenderer::removeSlideFromDisplay()
 				break;
 
 			case pis_MEDIA_TEXT:
-				dataTxt = ((pis_mediaText *)current->mediaElement.data);
+				if(graphicsProps->element != 0)
+					vc_dispmanx_element_remove(update, graphicsProps->element);
 
-				if(dataTxt->element != 0)
-					vc_dispmanx_element_remove(update, dataTxt->element);
-
-				dataTxt->element = 0;
+				graphicsProps->element = 0;
 				break;
 
 			//TODO:
 			case pis_MEDIA_AUDIO: break;
 		}
-		current = current->next;
 	}
 
 	endTime = linuxTimeInMs();

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 extern "C"
 {
 //External Libs
@@ -13,8 +15,7 @@ extern "C"
 #define PIS_COLOR_ARGB_GREEN 0xFF00FF00
 #define PIS_COLOR_ARGB_BLUE  0xFF0000FF
 
-//TODO: The compositor shouldn't be managing all the slides,
-//Need to separate that out and find a nice way to manage the image cache in RAM
+//Media might become class/inheritance based with a base class of "MediaItem"
 
 //ARGB 32 bit image buffer
 struct pis_img
@@ -55,12 +56,9 @@ enum pis_mediaTypes
 struct pis_mediaImage
 {
 	float x, y, maxWidth, maxHeight;
-	char *filename;
+	std::string filename;
 	pis_mediaSizing sizing;
 	pis_img cache;
-	DISPMANX_RESOURCE_HANDLE_T res;
-	DISPMANX_ELEMENT_HANDLE_T element;
-	uint32_t imgHandle;
 };
 
 struct pis_mediaVideo
@@ -74,12 +72,9 @@ struct pis_mediaVideo
 struct pis_mediaText
 {
 	float x, y, fontHeight;
-	char *fontName;
-	char *text;
+	std::string fontName;
+	std::string text;
 	uint32_t color;
-	DISPMANX_RESOURCE_HANDLE_T res;
-	DISPMANX_ELEMENT_HANDLE_T element;
-	uint32_t imgHandle;
 };
 
 struct pis_mediaAudio
@@ -87,30 +82,15 @@ struct pis_mediaAudio
 
 };
 
-struct pis_mediaElement_s
+struct pis_mediaElement
 {
-	const char *name;
+	std::string name;
 	pis_mediaTypes mediaType;
 	void *data; //struct to match the mediaType
+	void *appData; //Host specific rendering data
 	uint32_t z; //0 = bottom
-	//
 };
 
-struct pis_mediaElementList_s
-{
-	pis_mediaElement_s mediaElement;
-	struct pis_mediaElementList_s *next;
-};
-
-//A set of presentation slides
-struct pis_slides_s{
-	uint32_t duration; //millis
-	uint32_t dissolve; //millis for the fade into the slide
-//	bool loaded; //media content is ready in memory
-
-	pis_mediaElementList_s *mediaElementsHead;
-	pis_slides_s *next;
-};
 
 enum PlaybackState
 {

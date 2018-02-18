@@ -10,8 +10,8 @@ LIB+= compositor/ilclient/libilclient.a
 OBJS+= compositor/vgfont/font.o compositor/vgfont/vgft.o compositor/vgfont/graphics.o compositor/tricks.o compositor/piSlideRenderer.o
 LIBS+= compositor/vgfont/libvgfont.a 
 
-OBJS+=  compositor/fontTest.o compositor/compositor.o compositor/pijpegdecoder.o compositor/piImageResizer.o
-OBJS += graphicsTests.o PiSignageLogging.o
+OBJS+=  compositor/fontTest.o compositor/PiSlideShow.o compositor/pijpegdecoder.o compositor/piImageResizer.o
+OBJS += graphicsTests.o PiSignageLogging.o PiSlide.o
 
 BIN=PiSignage.bin
 

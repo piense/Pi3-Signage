@@ -70,7 +70,7 @@ void PiImageResizer::FillBufferDoneCB(
 
 	//TODO: output directly to the image buffer
 	if(decoder->obHeader != NULL){
-		pis_logMessage(PIS_LOGLEVEL_INFO,"Resizer: Processing received buffer\n");
+		pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Processing received buffer\n");
 
 		if(decoder->obHeader->nFilledLen + decoder->obDecodedAt > decoder->obHeader->nAllocLen){
 			pis_logMessage(PIS_LOGLEVEL_ERROR,"Resizer: ERROR overrun of decoded image buffer\n %d %d %d\n",
@@ -85,10 +85,10 @@ void PiImageResizer::FillBufferDoneCB(
 
 	    //See if we've reached the end of the stream
 	    if (decoder->obHeader->nFlags & OMX_BUFFERFLAG_EOS) {
-	    	pis_logMessage(PIS_LOGLEVEL_INFO,"Resizer: Output buffer EOS received\n");
+	    	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Output buffer EOS received\n");
 	    	decoder->obGotEOS = 1;
 	    }else{
-	    	pis_logMessage(PIS_LOGLEVEL_INFO,"Resizer: Output buffer asking for more data\n");
+	    	pis_logMessage(PIS_LOGLEVEL_ALL,"Resizer: Output buffer asking for more data\n");
 			int ret = OMX_FillThisBuffer(decoder->handle,
 					decoder->obHeader);
 			if (ret != OMX_ErrorNone) {

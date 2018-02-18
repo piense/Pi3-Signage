@@ -4,6 +4,7 @@
 
 #include "../PiSignageLogging.h"
 #include "piSlideTypes.h"
+#include "../PiSlide.h"
 
 extern "C"
 {
@@ -26,6 +27,12 @@ enum SlideRenderState
 	SLIDE_STATE_ERROR
 };
 
+struct pis_SlideGraphicsProperties {
+	DISPMANX_RESOURCE_HANDLE_T res;
+	DISPMANX_ELEMENT_HANDLE_T element;
+	uint32_t imgHandle;
+};
+
 class PiSlideRenderer{
 public:
 	PiSlideRenderer();
@@ -46,7 +53,7 @@ public:
 
 	int32_t dispmanxLayer;
 
-	struct pis_slides_s *slide; //TODO move this out of public and safe a few things
+	pis_Slide *slide; //TODO move this out of public and safe a few things
 
 	SlideRenderState state; //TODO: thread-safe getSlideState()
 private:
@@ -63,7 +70,6 @@ private:
 	VC_RECT_T srcRect, screenRect; //srcRect is screenRect * 2^16
 
 	VC_DISPMANX_ALPHA_T alpha; //alpha properties of the rendered element
-
 
 	float slideStartTime;
 };

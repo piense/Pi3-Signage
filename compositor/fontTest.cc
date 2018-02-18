@@ -45,7 +45,7 @@ void printFontList()
 void renderTextToScreen(uint32_t *screenBuf,
 		uint32_t screenWidth, uint32_t screenHeight,
 		uint32_t xPos, uint32_t yPos,
-		uint32_t fontSize, char* string,
+		uint32_t fontSize, const char* string,
 		uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha
 		)
 		{
@@ -129,10 +129,21 @@ void renderTextToScreen(uint32_t *screenBuf,
 
   pango_layout_set_alignment (layout, PANGO_ALIGN_CENTER);
 
+  cairo_set_source_rgba(cr, 0,
+		  0, 0, .3);
+
+  PangoRectangle rect;
+  pango_layout_get_pixel_extents (layout, NULL, &rect);
+
+  cairo_move_to(cr, xPos - rect.width/2 + fontSize/7,yPos - rect.height/2 +fontSize/7);
+
+  pango_cairo_update_layout(cr, layout);
+  pango_cairo_show_layout(cr, layout);
+
   cairo_set_source_rgba(cr, ((float)red)/255.0,
 		  ((float)green)/255.0, ((float)blue)/255.0, ((float)alpha)/255.0);
 
-  PangoRectangle rect;
+
   pango_layout_get_pixel_extents (layout, NULL, &rect);
 
   cairo_move_to(cr, xPos - rect.width/2,yPos - rect.height/2);

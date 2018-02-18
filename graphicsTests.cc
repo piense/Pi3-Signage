@@ -3,8 +3,8 @@
 
 #include "graphicsTests.h"
 #include "compositor/pijpegdecoder.h"
-#include "compositor/piresizer.h"
-#include "compositor/compositor.h"
+#include "compositor/piImageResizer.h"
+#include "compositor/PiSlideShow.h"
 #include "compositor/tricks.h"
 
 void printGPUMemory()

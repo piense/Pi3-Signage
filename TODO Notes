@@ -26,3 +26,5 @@ General:
 -dynamic text
 -media management
 -Figure out how to exit cleanly. Seemed to get picky when multiple jpegs on one slide(?)
+-Consistent camel case. public members CamelCase, function variables camelCase(?)
+-Consistent file name prefixes

@@ -38,6 +38,7 @@
 									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/cairo"/>
 									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/glib-2.0"/>
 									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/freetype2"/>
+									<listOptionValue builtIn="false" value="/home/david/Desktop/BR-Pi2/output/staging/usr/include/libxml2"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.364381430" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>

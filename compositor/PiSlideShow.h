@@ -12,9 +12,17 @@ extern "C"
 #include "vgfont/vgfont.h"
 }
 
-#include "piSlideTypes.h"
 #include "piSlideRenderer.h"
 #include "../PiSlide.h"
+
+
+enum PlaybackState
+{
+	PB_IDLE,
+	PB_DISSOLVING,
+	PB_LOADING_NEXT,
+	PB_WAITING_FOR_EXPIRED
+};
 
 
 class pis_SlideShow

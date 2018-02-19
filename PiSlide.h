@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string>
-#include <compositor/piSlideTypes.h>
+#include "mediatypes/PiMediaItem.h"
+#include "compositor/tricks.h"
 #include <list>
 
 //TODO Figure out how to manage Z-Order on slide media elements
@@ -55,49 +56,6 @@ public:
 	// return: 0 for good, otherwise error
 	static int ToXMLFile (std::list<pis_Slide> *slides,const char *file);
 
-
-	//Adds an image to the slide
-	//Image will be on top all other elements, ie last in the render std::list
-	// filename: In, image file to add. Doesn't access file at all.
-	// x: In, x position on slide 0 - 1. Position is relative to center of image and top left of slide.
-	// y: In, y position on slide 0 - 1. Position is relative to center of image and top left of slide.
-	// width: In, 0 - 1, Width of image on slide relative to display width.
-	// height: In, 0 - 1, Height of image on slide relative to display height.
-	// scaling: In, how the image is scaled to fit the given on-screen dimensions
-	// return: 0 for good, otherwise error
-	int AddImage(const char *filename, float x, float y, float width, float height, pis_mediaSizing scaling, void * appData);
-
-	//Adds text to the slide
-	//Text will be on top all other elements, ie last in the render std::list
-	// text: In, text to add
-	// x: In, x position on slide 0 - 1. Position is relative to center of text and top left of slide.
-	// y: In, y position on slide 0 - 1. Position is relative to center of text and top left of slide.
-	// width: In, 0 - 1, Width of text bounds on slide relative to display width.
-	// height: In, 0 - 1, Height of text bounds on slide relative to display height.
-	// fontHeight: In, 0 - 1, Height of text relative to slide height
-	// font: In, font style to use
-	// color: In, color in ARGB
-	// appData: In, host specific data structure
-	// return: 0 for good, otherwise error
-	int AddText(const char *text, float x, float y, float width, float height, float fontHeight, const char *font, uint32_t color, void * appData);
-
-	//Adds a video the slide
-	//Video will be on top all other elements, ie last in the render std::list
-	// filename: In, video file to add. Doesn't access file at all.
-	// x: In, x position on slide 0 - 1. Position is relative to center of video and top left of slide.
-	// y: In, y position on slide 0 - 1. Position is relative to center of video and top left of slide.
-	// width: In, 0 - 1, Width of video on slide relative to display width.
-	// height: In, 0 - 1, Height of video on slide relative to display height.
-	// scaling: In, how the video is scaled to fit the given on-screen dimensions
-	int AddVideo(const char *filename, float x, float y, float width, float height, pis_mediaSizing scaling, void * appData);
-
-
-	//Adds an audio file to the slide
-	// filename: In, audio file to add. Doesn't access file at all.
-	// volume: In, 0 to 1
-	// return: 0 for good, otherwise error
-	int AddAudio(const char *filename, float volume, void * appData);
-
 	//Sets the transition timing of a slide
 	// dissolveTime: In, Time in millis for the crossdissolve
 	// holdTime: In, Time in millis for the slide to hold before expiring
@@ -131,7 +89,7 @@ public:
 
 	//Using a std::list of structs for now, might rethink that later
 	//public for now so the renderer can work with it
-	std::list<pis_mediaElement> mediaElements;
+	std::list<pis_MediaItem*> mediaElements;
 
 private:
 	uint32_t DissolveTime;

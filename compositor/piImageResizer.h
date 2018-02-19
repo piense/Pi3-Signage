@@ -8,7 +8,6 @@ extern "C"
 
 #include <stdint.h>
 #include "tricks.h"
-#include "piSlideTypes.h"
 
 #define TIMEOUT_MS 200
 

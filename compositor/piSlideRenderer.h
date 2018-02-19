@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 #include "../PiSignageLogging.h"
-#include "piSlideTypes.h"
 #include "../PiSlide.h"
 
 extern "C"
@@ -27,12 +26,6 @@ enum SlideRenderState
 	SLIDE_STATE_ERROR
 };
 
-struct pis_SlideGraphicsProperties {
-	DISPMANX_RESOURCE_HANDLE_T res;
-	DISPMANX_ELEMENT_HANDLE_T element;
-	uint32_t imgHandle;
-};
-
 class PiSlideRenderer{
 public:
 	PiSlideRenderer();
@@ -46,7 +39,6 @@ public:
 	void startSlide(); //Fades up
 
 	void loadSlideResources(); //Reads resources from disk and gets them ready in memory
-	void removeSlideFromDisplay();
 	void freeSlideResources();
 
 	float getOpacity();

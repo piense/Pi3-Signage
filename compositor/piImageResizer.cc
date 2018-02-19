@@ -9,7 +9,6 @@ extern "C"
 
 #include "piImageResizer.h"
 #include "tricks.h"
-#include "piSlideTypes.h"
 #include "../PiSignageLogging.h"
 
 PiImageResizer::PiImageResizer(){

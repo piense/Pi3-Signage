@@ -10,18 +10,17 @@ extern "C"
 {
 //External libs
 #include "bcm_host.h"
-#include "vgfont/vgfont.h"
 }
 
 //Project includes
 #include "PiSlideShow.h"
-#include "pijpegdecoder.h"
-#include "piImageResizer.h"
 #include "tricks.h"
 #include "fontTest.h"
 #include "../graphicsTests.h"
 #include "../PiSignageLogging.h"
 #include "../PiSlide.h"
+#include "../mediatypes/PiMediaImage.h"
+#include "../mediatypes/PiMediaText.h"
 
 using namespace std;
 
@@ -77,13 +76,16 @@ int pis_SlideShow::LoadDirectory(string directory)
 
 				newSlide->SetTransition(PictureDissolveTime, PictureHoldTime);
 
-				newSlide->AddImage(&fullpath[0],
+				pis_MediaImage::AddToSlide(
+						&fullpath[0],
 						.5,.5, //position [0,1]
 						1,1 //size [0,1]
-						,pis_SIZE_CROP, NULL);
+						,pis_SIZE_CROP, newSlide);
 
 				if(PictureTitles)
-					newSlide->AddText(&name[0],.5,.95,1,1,30.0/1080.0,"",0xFFFFFFFF, NULL);
+					pis_MediaText::AddText(
+					&name[0],.5,.95,1,1,30.0/1080.0,
+					"",0xFFFFFFFF, newSlide);
 			}
 		}
 	closedir(d);
@@ -123,7 +125,6 @@ pis_SlideShow::~pis_SlideShow()
 
 	for(int i = 0;i<NumOfRenderers;i++)
 	{
-		SlideRenderers[i].removeSlideFromDisplay();
 		SlideRenderers[i].freeSlideResources();
 		SlideRenderers[i].slide = NULL;
 		delete [] SlideRenderers;
@@ -195,7 +196,6 @@ void pis_SlideShow::SlideRenderersCleanup(){
 	for(int i = 0;i<NumOfRenderers;i++)
 	{
 		if(SlideRenderers[i].state == SLIDE_STATE_DONE){
-			SlideRenderers[i].removeSlideFromDisplay();
 			SlideRenderers[i].freeSlideResources();
 			SlideRenderers[i].slide = NULL;
 		}

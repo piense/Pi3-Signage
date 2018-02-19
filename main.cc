@@ -7,6 +7,8 @@
 #include "compositor/tricks.h"
 #include "graphicsTests.h"
 #include "PiSignageLogging.h"
+#include "mediatypes/PiMediaImage.h"
+#include "mediatypes/PiMediaItem.h"
 
 #include <signal.h>
 #include <cstdlib>
@@ -19,6 +21,8 @@
 #include <math.h>
 #include "compositor/PiSlideShow.h"
 
+using namespace std;
+
 int SignageExit = 0;
 
 void stop(int s){
@@ -26,10 +30,11 @@ void stop(int s){
            SignageExit = 1;
 }
 
+pis_MediaItemManager *MediaItems;
 
 int main(int argc, char *argv[])
 {
-
+	MediaItems = &pis_MediaItemManager::instance();
    struct sigaction sigIntHandler;
 
    sigIntHandler.sa_handler = stop;
@@ -44,10 +49,16 @@ int main(int argc, char *argv[])
 
 	pis_loggingLevel = PIS_LOGLEVEL_INFO;
 
+   for(auto it = MediaItems->availableMediaTypes.begin();it!=MediaItems->availableMediaTypes.end();++it  )
+   {
+	   pis_logMessage(PIS_LOGLEVEL_INFO,"Loaded media type: %s\n",it->name);
+   }
+
 	//TODO: Catch Ctrl+C for cleanup
 
 	pis_SlideShow slideshow;
 
+	slideshow.PictureTitles = true;
 	slideshow.LoadDirectory("/mnt/data/images");
 
 	while(!SignageExit)

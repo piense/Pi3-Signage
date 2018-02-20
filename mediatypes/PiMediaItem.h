@@ -8,6 +8,7 @@ extern "C"
 
 #include <string>
 #include <list>
+#include <libxml/parser.h>
 #include "../PiSignageLogging.h"
 
 class pis_MediaItem;
@@ -26,6 +27,8 @@ enum pis_MediaState
 class pis_MediaItem
 {
 public:
+	pis_MediaItem() { }
+	virtual ~pis_MediaItem() { }
 
 	//Gives the media item access to the Slides off screen buffer region
 	//Assumption is that it needs to render to the top layer of this
@@ -53,7 +56,7 @@ public:
 
 	//Recreates the object from XML
 	//Must be overriden in super classes
-	static int FromXML(std::string XML)
+	static int FromXML(xmlNodePtr mediaItemNode, pis_MediaItem **outItem)
 	{
 		pis_logMessage(PIS_LOGLEVEL_ERROR, "Error: FromXML not implemented.\n");
 		return -1;
@@ -63,6 +66,8 @@ public:
 	// XML: Out, pointer to pointer to point to new string object
 	virtual int ToXML(std::string **XML) = 0;
 
+	virtual int ToXML(xmlNodePtr slideNode) = 0;
+
 	//Returns the state of the media item
 	virtual pis_MediaState GetState() = 0;
 };
@@ -70,8 +75,10 @@ public:
 struct pis_MediaItemType
 {
 	const char* name;
-	int (*FromXML)(std::string XML, pis_MediaItem **newItem);
+	int (*FromXML)(xmlNodePtr, pis_MediaItem **);
 };
+
+typedef int (*xmlFactoryFunc)(xmlNodePtr, pis_MediaItem **);
 
 class pis_MediaItemManager
 {
@@ -82,6 +89,15 @@ public:
 	}
 
 	std::list<pis_MediaItemType> availableMediaTypes;
+
+	xmlFactoryFunc getXMLFunc(const char* type){
+		for(std::list<pis_MediaItemType>::iterator it = availableMediaTypes.begin();
+				it!=availableMediaTypes.end();++it)
+			if(strcmp(it->name,type) == 0)
+				return it->FromXML;
+		return NULL;
+	}
+
 	void reg(pis_MediaItemType type){
 		availableMediaTypes.push_back(type);
 	}
@@ -93,7 +109,7 @@ private:
 
 struct pis_MediaItemRegistrar
 {
-	pis_MediaItemRegistrar (const char* name, int (*FromXML)(std::string XML, pis_MediaItem **newItem)){
+	pis_MediaItemRegistrar (const char* name, int (*FromXML)(xmlNodePtr node, pis_MediaItem **newItem)){
 		pis_MediaItemType data;
 		data.name = name;
 		data.FromXML = FromXML;

@@ -7,9 +7,6 @@
 
 using namespace std;
 
-const char* pis_MediaText::MediaType = "Text";
-const pis_MediaItemRegistrar pis_MediaText::r(MediaType, &FromXML);
-
 pis_MediaText::pis_MediaText()
 {
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"pis_MediaText::pis_MediaText\n");
@@ -31,6 +28,11 @@ pis_MediaText::pis_MediaText()
 	alpha.flags = (DISPMANX_FLAGS_ALPHA_T)(DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_MIX);
 	alpha.opacity = 255; //alpha 0->255
 	alpha.mask = 0;
+}
+
+pis_MediaText::~pis_MediaText()
+{
+
 }
 
 //Gives the media item access to the Slides off screen buffer region

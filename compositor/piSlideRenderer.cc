@@ -184,8 +184,8 @@ void PiSlideRenderer::freeSlideResources()
 
 	uint32_t update = vc_dispmanx_update_start(10);
 
-	for(list<pis_MediaItem*>::iterator it = slide->mediaElements.begin();
-			it != slide->mediaElements.end(); ++it)
+	for(list<pis_MediaItem*>::iterator it = slide->MediaElements.begin();
+			it != slide->MediaElements.end(); ++it)
 	{
 		(*it)->Unload(update);
 	}
@@ -222,8 +222,8 @@ void PiSlideRenderer::loadSlideResources()
 
 	double startTime2 = linuxTimeInMs();
 
-	for(list<pis_MediaItem*>::iterator it = slide->mediaElements.begin();
-			it != slide->mediaElements.end(); ++it)
+	for(list<pis_MediaItem*>::iterator it = slide->MediaElements.begin();
+			it != slide->MediaElements.end(); ++it)
 	{
 		//Might be a better place to do this than every load but it's quick
 		(*it)->SetGraphicsHandles(offscreenDisplay,mainDisplayInfo.width,mainDisplayInfo.height);
@@ -304,8 +304,8 @@ void PiSlideRenderer::compositeSlide(uint32_t update)
 
 	int layer = 2000;
 
-	for(list<pis_MediaItem *>::iterator it = slide->mediaElements.begin();
-			it != slide->mediaElements.end(); ++it)
+	for(list<pis_MediaItem *>::iterator it = slide->MediaElements.begin();
+			it != slide->MediaElements.end(); ++it)
 	{
 		(*it)->DoComposite(update,++layer);
 	}

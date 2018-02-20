@@ -11,6 +11,7 @@ extern "C"
 #include "PiMediaItem.h"
 #include "../compositor/tricks.h"
 #include "../PiSlide.h"
+#include <libxml/parser.h>
 
 class pis_MediaImage : pis_MediaItem
 {
@@ -42,18 +43,20 @@ public:
 	std::string GetType();
 
 	//Recreates the object from XML
-	static int FromXML(std::string XML, pis_MediaItem **mediaItem);
+	static int FromXML(xmlNodePtr node, pis_MediaItem **outItem);
 
 	//Exports the media structure as XML
 	// XML: Out, pointer to pointer to point to new string object
 	int ToXML(std::string **XML);
 
+	int ToXML(xmlNodePtr slideNode);
+
 	//Returns the state of the media item
 	pis_MediaState GetState();
 
 	//Adds image to a given slide
-	static int AddToSlide(const char *filename, float x, float y,
-			float width, float height, pis_mediaSizing scaling, pis_Slide *slide);
+	static int NewImage(const char *filename, float x, float y,
+			float width, float height, pis_mediaSizing scaling, pis_MediaItem **item);
 
 	float X, Y, MaxWidth, MaxHeight;
 	uint32_t ScreenWidth, ScreenHeight;

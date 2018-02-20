@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include <libxml/parser.h>
+
 #include "PiMediaItem.h"
 #include "../PiSlide.h"
 
@@ -41,18 +43,20 @@ public:
 	std::string GetType();
 
 	//Recreates the object from XML
-	static int FromXML(std::string XML, pis_MediaItem **mediaItem);
+	static int FromXML(xmlNodePtr node, pis_MediaItem **outItem);
 
 	//Exports the media structure as XML
 	// XML: Out, pointer to pointer to point to new string object
 	int ToXML(std::string **XML);
 
+	int ToXML(xmlNodePtr slideNode);
+
 	//Returns the state of the media item
 	pis_MediaState GetState();
 
-	static int AddText(const char *text, float x, float y,
+	static int NewText(const char *text, float x, float y,
 			float width, float height, float fontHeight,
-			const char *font, uint32_t color, pis_Slide *slide);
+			const char *font, uint32_t color, pis_MediaItem **item);
 
 	float X, Y, FontHeight;
 	std::string FontName;

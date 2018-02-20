@@ -43,6 +43,10 @@ int main(int argc, char *argv[])
 
    sigaction(SIGINT, &sigIntHandler, NULL);
 
+   list<pis_Slide*> *slides;
+
+   pis_Slide::FromXMLFile("/mnt/data/test.xml",&slides);
+
 	//decoderTest();
 	//resizerTest();
 	//dispmanXResourceTest();
@@ -58,8 +62,10 @@ int main(int argc, char *argv[])
 
 	pis_SlideShow slideshow;
 
-	slideshow.PictureTitles = true;
-	slideshow.LoadDirectory("/mnt/data/images");
+	//slideshow.PictureTitles = true;
+	//slideshow.LoadDirectory("/mnt/data/images");
+
+	slideshow.Slides = *slides;
 
 	while(!SignageExit)
 	{

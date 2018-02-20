@@ -4,6 +4,7 @@
 #include "mediatypes/PiMediaItem.h"
 #include "compositor/tricks.h"
 #include <list>
+#include <libxml/parser.h>
 
 //TODO Figure out how to manage Z-Order on slide media elements
 
@@ -20,6 +21,8 @@ public:
 	// return: 0 for good, otherwise error
 	int FromXML(std::string slideTxt);
 
+	static int FromXML(xmlNodePtr node, pis_Slide **newSlide);
+
 	//Takes slides formatted as xml and returns a collection of slides
 	// slideTxt: In, slides as XML in a std::string
 	// slides: Out, pointers to slides.
@@ -32,18 +35,23 @@ public:
 	// return: 0 for good, otherwise error
 	int ToXML(std::string **slideTxt);
 
+
+	int ToXML(xmlNodePtr slidesNode);
+
 	//Takes multiples slides and serializes them to XML
 	// slides: In, Slide structures to serialize
 	// slideTxt: Out, pointer to change to new std::string object containing XML
 	// 			  One std::string containing multiple slide objects
 	// return: 0 for good, otherwise error
-	static int ToXML(std::list<pis_Slide> *slides, std::string **slideTxt);
+	static int ToXML(std::list<pis_Slide*> *slides, xmlDocPtr doc);
+
+	static int ToXML(std::list<pis_Slide*> *slides, std::string **XML);
 
 	//Reads a file from the filesystem and deserializes it into slide objects
 	// file: In, file to read
 	// slides: Out, slides read from file
 	// return: 0 for good, otherwise error
-	static int FromXMLFile (const char *file, std::list<pis_Slide> **slides);
+	static int FromXMLFile (const char *file, std::list<pis_Slide*> **slides);
 
 	//Serializes a slide to an XML file
 	// file: In, file to write data to
@@ -54,7 +62,7 @@ public:
 	// slides: In, slides to serialize
 	// file: In, file to write data to
 	// return: 0 for good, otherwise error
-	static int ToXMLFile (std::list<pis_Slide> *slides,const char *file);
+	static int ToXMLFile (std::list<pis_Slide *> *slides,const char *file);
 
 	//Sets the transition timing of a slide
 	// dissolveTime: In, Time in millis for the crossdissolve
@@ -89,7 +97,7 @@ public:
 
 	//Using a std::list of structs for now, might rethink that later
 	//public for now so the renderer can work with it
-	std::list<pis_MediaItem*> mediaElements;
+	std::list<pis_MediaItem*> MediaElements;
 
 private:
 	uint32_t DissolveTime;

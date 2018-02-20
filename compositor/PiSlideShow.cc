@@ -68,6 +68,7 @@ int pis_SlideShow::LoadDirectory(string directory)
 				pis_logMessage(PIS_LOGLEVEL_INFO,"pis_SlideShow::LoadDirectory adding: %s\n",name);
 
 				pis_Slide *newSlide;
+				pis_MediaItem *newMedia;
 
 				if(AddNewSlide(&newSlide) != 0){
 					pis_logMessage(PIS_LOGLEVEL_ERROR, "pis_SlideShow::LoadDirectory: Failed to get new slide\n");
@@ -76,20 +77,26 @@ int pis_SlideShow::LoadDirectory(string directory)
 
 				newSlide->SetTransition(PictureDissolveTime, PictureHoldTime);
 
-				pis_MediaImage::AddToSlide(
+				pis_MediaImage::NewImage(
 						&fullpath[0],
 						.5,.5, //position [0,1]
-						1,1 //size [0,1]
-						,pis_SIZE_CROP, newSlide);
+						1, 1 //size [0,1]
+						,pis_SIZE_CROP, &newMedia);
 
-				if(PictureTitles)
-					pis_MediaText::AddText(
+				newSlide->MediaElements.push_back(newMedia);
+
+				if(PictureTitles){
+					pis_MediaText::NewText(
 					&name[0],.5,.95,1,1,30.0/1080.0,
-					"",0xFFFFFFFF, newSlide);
+					"",0xFFFFFFFF, &newMedia);
+					newSlide->MediaElements.push_back(newMedia);
+				}
 			}
 		}
 	closedir(d);
 	}
+
+	pis_Slide::ToXMLFile(&Slides, "/mnt/data/SlideShow.xml");
 
 	return 0;
 }

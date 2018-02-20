@@ -50,6 +50,9 @@ public:
 	//Time the picture remains on screen
 	uint32_t PictureHoldTime;
 
+	//TODO Might move this back to private
+	std::list<pis_Slide*> Slides;
+
 private:
 
 	//Adds a slide to the end of the slide list
@@ -73,8 +76,6 @@ private:
 	//Last time in linux millis we printed memory usage.
 	//Should move this elsewhere but it's a good check for now
 	double LastMemPrint;
-
-	std::list<pis_Slide*> Slides;
 
 	std::list<pis_Slide*>::iterator NextSlide;
 	std::list<pis_Slide*>::iterator CurrentSlide;

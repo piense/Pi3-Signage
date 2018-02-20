@@ -13,9 +13,6 @@ extern "C"
 
 using namespace std;
 
-const char* pis_MediaImage::MediaType = "Image";
-const pis_MediaItemRegistrar pis_MediaImage::r(MediaType, &FromXML);
-
 pis_MediaImage::pis_MediaImage(){
 	pis_logMessage(PIS_LOGLEVEL_FUNCTION_HEADER,"pis_MediaImage::pis_MediaImage\n");
 
@@ -35,6 +32,11 @@ pis_MediaImage::pis_MediaImage(){
 	alpha.flags = (DISPMANX_FLAGS_ALPHA_T)(DISPMANX_FLAGS_ALPHA_FROM_SOURCE | DISPMANX_FLAGS_ALPHA_MIX);
 	alpha.opacity = 255; //alpha 0->255
 	alpha.mask = 0;
+}
+
+pis_MediaImage::~pis_MediaImage()
+{
+
 }
 
 
